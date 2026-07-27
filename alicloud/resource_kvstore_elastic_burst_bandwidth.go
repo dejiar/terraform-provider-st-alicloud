@@ -3,6 +3,7 @@ package alicloud
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -214,21 +215,26 @@ func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, 
 
 // setBurst calls EnableAdditionalBandwidth with NodeId="All" to toggle burst.
 //
-// Enabling burst on "All" wipes any existing individual shard additional
-// bandwidth. If both burst and individual shard bandwidth resources are used
-// on the same instance, add depends_on to the individual shard resource to
-// ensure it runs AFTER burst — the per-shard call naturally preserves burst
-// on sibling shards.
+// The API requires a Bandwidth parameter even when only toggling burst.
+// Passing Bandwidth=0 wipes existing per-shard additional bandwidth on ALL
+// shards. To preserve per-shard settings, we read the current additional
+// bandwidth from the first shard and pass that value. If no per-shard
+// bandwidth is configured (or read fails), we fall back to 0.
 func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst bool) error {
 	burstStr := "false"
 	if burst {
 		burstStr = "true"
 	}
 
+	// Read current per-shard additional bandwidth to preserve it.
+	// Bandwidth=0 on NodeId="All" resets all shards — we must pass the
+	// existing value instead.
+	preserveBw := r.readPreserveBandwidth(instanceId)
+
 	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", map[string]any{
 		"InstanceId":     tea.String(instanceId),
 		"NodeId":         tea.String("All"),
-		"Bandwidth":      tea.String("0"),
+		"Bandwidth":      tea.String(strconv.FormatInt(preserveBw, 10)),
 		"BandWidthBurst": tea.String(burstStr),
 		"ChargeType":     tea.String("PostPaid"),
 		"AutoPay":        tea.String("true"),
@@ -257,4 +263,85 @@ func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, bu
 		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d)", instanceId, burstBw)
 	}
 	return nil
+}
+
+// readPreserveBandwidth reads the current per-shard additional bandwidth so it
+// can be preserved when toggling burst. EnableAdditionalBandwidth(NodeId="All",
+// Bandwidth=0) wipes per-shard settings — passing the existing value avoids this.
+//
+// For cluster instances, uses DescribeLogicInstanceTopology.
+// For standard instances, uses DescribeRoleZoneInfo.
+// Returns 0 if no per-shard bandwidth is configured or read fails (non-fatal).
+func (r *kvstoreElasticBurstBandwidthResource) readPreserveBandwidth(instanceId string) int64 {
+	// Try cluster topology first.
+	shards, _, err := kvstoreReadAllShardBandwidths(r.client, instanceId)
+	if err == nil && len(shards) > 0 {
+		// Return the max additional bandwidth across shards.
+		// EnableAdditionalBandwidth with NodeId="All" applies the same
+		// bandwidth to all shards, so we use the max to avoid downgrading any shard.
+		var maxBw int64
+		for _, s := range shards {
+			if s.AdditionalBw > maxBw {
+				maxBw = s.AdditionalBw
+			}
+		}
+		return maxBw
+	}
+
+	// Fall back to DescribeRoleZoneInfo for non-cluster instances.
+	// Read instance to get base bandwidth.
+	instBody, err := kvstoreRawCall(r.client, "DescribeInstances", map[string]any{
+		"InstanceIds": tea.String(instanceId),
+	})
+	if err != nil {
+		return 0
+	}
+	instsContainer, ok := instBody["Instances"].(map[string]any)
+	if !ok {
+		return 0
+	}
+	insts, ok := instsContainer["KVStoreInstance"].([]any)
+	if !ok || len(insts) == 0 {
+		return 0
+	}
+	inst, ok := insts[0].(map[string]any)
+	if !ok {
+		return 0
+	}
+	totalBw := toInt64(inst["Bandwidth"])
+	shardCount := toInt64(inst["ShardCount"])
+	if shardCount <= 0 {
+		shardCount = 1
+	}
+	baseBw := totalBw / shardCount
+
+	// Read node bandwidth.
+	nodeBody, err := kvstoreRawCall(r.client, "DescribeRoleZoneInfo", map[string]any{
+		"InstanceId": tea.String(instanceId),
+	})
+	if err != nil {
+		return 0
+	}
+	nodeContainer, ok := nodeBody["Node"].(map[string]any)
+	if !ok {
+		return 0
+	}
+	nodes, ok := nodeContainer["NodeInfo"].([]any)
+	if !ok {
+		return 0
+	}
+
+	var maxAdditional int64
+	for _, n := range nodes {
+		node, ok := n.(map[string]any)
+		if !ok {
+			continue
+		}
+		currentBw := toInt64(node["CurrentBandWidth"])
+		additional := currentBw - baseBw
+		if additional > maxAdditional {
+			maxAdditional = additional
+		}
+	}
+	return maxAdditional
 }
