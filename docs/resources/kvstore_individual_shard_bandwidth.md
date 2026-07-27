@@ -1,21 +1,21 @@
 ---
 subcategory: "Redis (R-Kvstore)"
 layout: "alicloud"
-page_title: "ST-Alicloud: kvstore_per_shard_bandwidth"
+page_title: "ST-Alicloud: kvstore_individual_shard_bandwidth"
 description: |-
-  Manages additional per-shard bandwidth for an Alibaba Cloud Redis instance.
+  Manages additional individual shard bandwidth for an Alibaba Cloud Redis instance.
 ---
 
-# st-alicloud_kvstore_per_shard_bandwidth
+# st-alicloud_kvstore_individual_shard_bandwidth
 
-Manages additional per-shard bandwidth for an Alibaba Cloud Redis (R-Kvstore) instance.
+Manages additional individual shard bandwidth for an Alibaba Cloud Redis (R-Kvstore) instance.
 
 This purchases **permanent** additional bandwidth for a specific shard (node). Use `DescribeRoleZoneInfo` or `DescribeLogicInstanceTopology` to list available shard IDs.
 
 ## Example Usage
 
 ```hcl
-resource "st-alicloud_kvstore_per_shard_bandwidth" "shard_0" {
+resource "st-alicloud_kvstore_individual_shard_bandwidth" "shard_0" {
   instance_id = "r-xxxxx"
   shard_id    = "r-xxxxx-db-0"
   bandwidth   = 20
@@ -30,7 +30,7 @@ resource "st-alicloud_kvstore_elastic_burst_bandwidth" "burst" {
   burstable_bandwidth = true
 }
 
-resource "st-alicloud_kvstore_per_shard_bandwidth" "shard_0" {
+resource "st-alicloud_kvstore_individual_shard_bandwidth" "shard_0" {
   instance_id = "r-xxxxx"
   shard_id    = "r-xxxxx-db-0"
   bandwidth   = 20
@@ -45,7 +45,7 @@ The following arguments are supported:
 
 * `instance_id` - (Required, Forces new resource) The ID of the Redis instance.
 * `shard_id` - (Required, Forces new resource) The shard (node) ID in InsName format (e.g. `r-xxxxx-db-0`). Use `DescribeRoleZoneInfo` or `DescribeLogicInstanceTopology` to list available shard IDs.
-* `bandwidth` - (Required) Additional bandwidth in MB/s for the shard. Must be a positive integer (>= 1). The max per-shard additional bandwidth is `IntranetBandWidthBurst - DefaultBandWidth` (both read from the API). Validate this in your Terraform `variable` `validation` blocks.
+* `bandwidth` - (Required) Additional bandwidth in MB/s for the shard. Must be a positive integer (>= 1). The max individual shard additional bandwidth is `IntranetBandWidthBurst - DefaultBandWidth` (both read from the API). Validate this in your Terraform `variable` `validation` blocks.
 
 ## Attribute Reference
 
@@ -55,10 +55,10 @@ The following attributes are exported:
 
 ## Import
 
-Redis per-shard bandwidth can be imported using the format `instance_id:shard_id`:
+Redis individual shard bandwidth can be imported using the format `instance_id:shard_id`:
 
 ```shell
-terraform import st-alicloud_kvstore_per_shard_bandwidth.shard_0 r-xxxxx:r-xxxxx-db-0
+terraform import st-alicloud_kvstore_individual_shard_bandwidth.shard_0 r-xxxxx:r-xxxxx-db-0
 ```
 
 ## Notes

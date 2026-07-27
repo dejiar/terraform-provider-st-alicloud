@@ -16,22 +16,22 @@ import (
 )
 
 // kvstoreShardBw holds the bandwidth state of a single shard, read from
-// DescribeLogicInstanceTopology. AdditionalBw is the per-shard additional
+// DescribeLogicInstanceTopology. AdditionalBw is the individual shard additional
 // bandwidth (current - base), or 0 if burst is active on the shard (burst
 // replaces additional bandwidth — they are mutually exclusive per shard).
 type kvstoreShardBw struct {
 	ShardId      string // e.g. "r-xxx-db-0" (NodeId with # suffix stripped)
 	CurrentBw    int64  // total bandwidth shown in topology
-	AdditionalBw int64  // per-shard additional bandwidth (0 if burst active)
+	AdditionalBw int64  // individual shard additional bandwidth (0 if burst active)
 }
 
-// kvstoreReadAllShardBandwidths reads the current per-shard bandwidth state
+// kvstoreReadAllShardBandwidths reads the current individual shard bandwidth state
 // from DescribeLogicInstanceTopology. Returns the list of shards (master nodes
 // only) and the base bandwidth per shard.
 //
-// Used by the burst resource to preserve existing per-shard bandwidth settings
+// Used by the burst resource to preserve existing individual shard bandwidth settings
 // when toggling burst — without this, EnableAdditionalBandwidth(NodeId="All",
-// Bandwidth=0) silently wipes per-shard additional bandwidth.
+// Bandwidth=0) silently wipes individual shard additional bandwidth.
 func kvstoreReadAllShardBandwidths(client *alicloudOpenapiClient.Client, instanceId string) ([]kvstoreShardBw, int64, error) {
 	// 1. Read instance-level Bandwidth + ShardCount to calculate base per shard.
 	instBody, err := kvstoreRawCall(client, "DescribeInstances", map[string]any{
@@ -204,7 +204,7 @@ func kvstoreReadBurstValue(client *alicloudOpenapiClient.Client, instanceId stri
 	return toInt64(body["IntranetBandWidthBurst"]), nil
 }
 
-// kvstoreReadNodeBandwidth reads per-shard bandwidth from DescribeRoleZoneInfo,
+// kvstoreReadNodeBandwidth reads individual shard bandwidth from DescribeRoleZoneInfo,
 // matching by InsName (e.g. "r-xxx-db-0"). Returns currentBw, defaultBw, isBwOpen.
 func kvstoreReadNodeBandwidth(client *alicloudOpenapiClient.Client, instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
 	body, err := kvstoreRawCall(client, "DescribeRoleZoneInfo", map[string]any{

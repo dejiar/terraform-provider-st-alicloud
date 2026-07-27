@@ -214,10 +214,10 @@ func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, 
 
 // setBurst calls EnableAdditionalBandwidth with NodeId="All" to toggle burst.
 //
-// CRITICAL: Before the API call, reads the current per-shard bandwidth state.
-// Burst and per-shard bandwidth are mutually exclusive per shard — calling
+// CRITICAL: Before the API call, reads the current individual shard bandwidth state.
+// Burst and individual shard bandwidth are mutually exclusive per shard — calling
 // EnableAdditionalBandwidth(NodeId="All", Bandwidth=0) without preserving
-// existing per-shard bandwidths silently wipes them. To preserve per-shard
+// existing individual shard bandwidths silently wipes them. To preserve individual shard
 // additional bandwidth on shards that have it, we read the current state and
 // pass the shard IDs and bandwidths through.
 //
@@ -229,7 +229,7 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 		burstStr = "true"
 	}
 
-	// Read current per-shard bandwidths to preserve them.
+	// Read current individual shard bandwidths to preserve them.
 	shards, _, _ := kvstoreReadAllShardBandwidths(r.client, instanceId)
 
 	queries := map[string]any{
@@ -241,7 +241,7 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 		"AutoPay":        tea.String("true"),
 	}
 
-	// If shards have per-shard additional bandwidth, include their IDs and
+	// If shards have individual shard additional bandwidth, include their IDs and
 	// bandwidth values so the API preserves them. The API accepts multiple
 	// shard IDs comma-separated in NodeId, with matching Bandwidth values.
 	if len(shards) > 0 {

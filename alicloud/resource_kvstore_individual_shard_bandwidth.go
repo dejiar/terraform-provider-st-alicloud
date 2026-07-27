@@ -20,33 +20,33 @@ import (
 )
 
 var (
-	_ resource.Resource                = &kvstorePerShardBandwidthResource{}
-	_ resource.ResourceWithConfigure   = &kvstorePerShardBandwidthResource{}
-	_ resource.ResourceWithImportState = &kvstorePerShardBandwidthResource{}
+	_ resource.Resource                = &kvstoreIndividualShardBandwidthResource{}
+	_ resource.ResourceWithConfigure   = &kvstoreIndividualShardBandwidthResource{}
+	_ resource.ResourceWithImportState = &kvstoreIndividualShardBandwidthResource{}
 )
 
-func NewKvstorePerShardBandwidthResource() resource.Resource {
-	return &kvstorePerShardBandwidthResource{}
+func NewKvstoreIndividualShardBandwidthResource() resource.Resource {
+	return &kvstoreIndividualShardBandwidthResource{}
 }
 
-type kvstorePerShardBandwidthResource struct {
+type kvstoreIndividualShardBandwidthResource struct {
 	client *alicloudOpenapiClient.Client
 }
 
-type kvstorePerShardBandwidthModel struct {
+type kvstoreIndividualShardBandwidthModel struct {
 	Id         types.String `tfsdk:"id"`
 	InstanceId types.String `tfsdk:"instance_id"`
 	ShardId    types.String `tfsdk:"shard_id"`
 	Bandwidth  types.Int64  `tfsdk:"bandwidth"`
 }
 
-func (r *kvstorePerShardBandwidthResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_kvstore_per_shard_bandwidth"
+func (r *kvstoreIndividualShardBandwidthResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_kvstore_individual_shard_bandwidth"
 }
 
-func (r *kvstorePerShardBandwidthResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *kvstoreIndividualShardBandwidthResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages additional per-shard bandwidth for an Alibaba Cloud Redis (R-Kvstore) instance. " +
+		Description: "Manages additional individual shard bandwidth for an Alibaba Cloud Redis (R-Kvstore) instance. " +
 			"This purchases permanent additional bandwidth for a specific shard (node). " +
 			"Use `DescribeRoleZoneInfo` or `DescribeLogicInstanceTopology` to list available shard IDs.",
 		Attributes: map[string]schema.Attribute{
@@ -74,7 +74,7 @@ func (r *kvstorePerShardBandwidthResource) Schema(_ context.Context, _ resource.
 			},
 			"bandwidth": schema.Int64Attribute{
 				Description: "Additional bandwidth in MB/s for the shard. Must be a positive integer (>= 1). " +
-					"The max per-shard additional bandwidth is `IntranetBandWidthBurst - DefaultBandWidth` " +
+					"The max individual shard additional bandwidth is `IntranetBandWidthBurst - DefaultBandWidth` " +
 					"(both read from the API). Validate this in your Terraform `variable` `validation` blocks.",
 				Required: true,
 				Validators: []validator.Int64{
@@ -85,7 +85,7 @@ func (r *kvstorePerShardBandwidthResource) Schema(_ context.Context, _ resource.
 	}
 }
 
-func (r *kvstorePerShardBandwidthResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
+func (r *kvstoreIndividualShardBandwidthResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -94,8 +94,8 @@ func (r *kvstorePerShardBandwidthResource) Configure(_ context.Context, req reso
 
 // --- CRUD ---
 
-func (r *kvstorePerShardBandwidthResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan *kvstorePerShardBandwidthModel
+func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan *kvstoreIndividualShardBandwidthModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -108,7 +108,7 @@ func (r *kvstorePerShardBandwidthResource) Create(ctx context.Context, req resou
 
 	if err := r.setBandwidth(instanceId, shardId, bandwidth); err != nil {
 		resp.Diagnostics.AddError(
-			"[API ERROR] Failed to set Redis per-shard bandwidth.",
+			"[API ERROR] Failed to set Redis individual shard bandwidth.",
 			err.Error(),
 		)
 		return
@@ -122,7 +122,7 @@ func (r *kvstorePerShardBandwidthResource) Create(ctx context.Context, req resou
 		return
 	}
 
-	state := &kvstorePerShardBandwidthModel{
+	state := &kvstoreIndividualShardBandwidthModel{
 		Id:         types.StringValue(makeShardId(instanceId, shardId)),
 		InstanceId: plan.InstanceId,
 		ShardId:    plan.ShardId,
@@ -131,8 +131,8 @@ func (r *kvstorePerShardBandwidthResource) Create(ctx context.Context, req resou
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *kvstorePerShardBandwidthResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state *kvstorePerShardBandwidthModel
+func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state *kvstoreIndividualShardBandwidthModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -153,7 +153,7 @@ func (r *kvstorePerShardBandwidthResource) Read(ctx context.Context, req resourc
 			return
 		}
 		resp.Diagnostics.AddError(
-			"[API ERROR] Failed to read Redis per-shard bandwidth.",
+			"[API ERROR] Failed to read Redis individual shard bandwidth.",
 			err.Error(),
 		)
 		return
@@ -174,8 +174,8 @@ func (r *kvstorePerShardBandwidthResource) Read(ctx context.Context, req resourc
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *kvstorePerShardBandwidthResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan *kvstorePerShardBandwidthModel
+func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan *kvstoreIndividualShardBandwidthModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -188,7 +188,7 @@ func (r *kvstorePerShardBandwidthResource) Update(ctx context.Context, req resou
 
 	if err := r.setBandwidth(instanceId, shardId, bandwidth); err != nil {
 		resp.Diagnostics.AddError(
-			"[API ERROR] Failed to update Redis per-shard bandwidth.",
+			"[API ERROR] Failed to update Redis individual shard bandwidth.",
 			err.Error(),
 		)
 		return
@@ -202,7 +202,7 @@ func (r *kvstorePerShardBandwidthResource) Update(ctx context.Context, req resou
 		return
 	}
 
-	state := &kvstorePerShardBandwidthModel{
+	state := &kvstoreIndividualShardBandwidthModel{
 		Id:         types.StringValue(makeShardId(instanceId, shardId)),
 		InstanceId: plan.InstanceId,
 		ShardId:    plan.ShardId,
@@ -211,8 +211,8 @@ func (r *kvstorePerShardBandwidthResource) Update(ctx context.Context, req resou
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *kvstorePerShardBandwidthResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state *kvstorePerShardBandwidthModel
+func (r *kvstoreIndividualShardBandwidthResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state *kvstoreIndividualShardBandwidthModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -227,14 +227,14 @@ func (r *kvstorePerShardBandwidthResource) Delete(ctx context.Context, req resou
 	// for many instance types.
 	if err := r.setBandwidth(instanceId, shardId, 0); err != nil {
 		resp.Diagnostics.AddError(
-			"[API ERROR] Failed to reset Redis per-shard bandwidth.",
+			"[API ERROR] Failed to reset Redis individual shard bandwidth.",
 			err.Error(),
 		)
 		return
 	}
 }
 
-func (r *kvstorePerShardBandwidthResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *kvstoreIndividualShardBandwidthResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Format: instance_id:shard_id
 	parts := strings.SplitN(req.ID, ":", 2)
 	if len(parts) != 2 {
@@ -267,8 +267,8 @@ func makeShardId(instanceId, shardId string) string {
 //
 // If burst is currently enabled at instance level (NodeId="All"), we keep
 // BandWidthBurst=true so the API preserves it on the target shard's sibling
-// shards. The target shard itself switches from burst to per-shard additional.
-func (r *kvstorePerShardBandwidthResource) setBandwidth(instanceId, shardId string, bandwidth int64) error {
+// shards. The target shard itself switches from burst to individual shard additional.
+func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shardId string, bandwidth int64) error {
 	bwStr := fmt.Sprintf("%d", bandwidth)
 
 	// Read current burst state to preserve it on sibling shards.
@@ -289,7 +289,7 @@ func (r *kvstorePerShardBandwidthResource) setBandwidth(instanceId, shardId stri
 
 	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", queries)
 	if err != nil {
-		return fmt.Errorf("failed to set per-shard bandwidth for instance %s shard %s: %w", instanceId, shardId, err)
+		return fmt.Errorf("failed to set individual shard bandwidth for instance %s shard %s: %w", instanceId, shardId, err)
 	}
 
 	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
@@ -301,7 +301,7 @@ func (r *kvstorePerShardBandwidthResource) setBandwidth(instanceId, shardId stri
 // verifyBandwidth reads back the shard bandwidth and confirms the requested
 // value took effect. Catches cases where the API returns success but the
 // change was silently ignored.
-func (r *kvstorePerShardBandwidthResource) verifyBandwidth(instanceId, shardId string, bandwidth int64) error {
+func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, bandwidth int64) error {
 	currentBw, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		return fmt.Errorf("failed to read node bandwidth for verification: %w", err)
