@@ -214,52 +214,25 @@ func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, 
 
 // setBurst calls EnableAdditionalBandwidth with NodeId="All" to toggle burst.
 //
-// CRITICAL: Before the API call, reads the current individual shard bandwidth state.
-// Burst and individual shard bandwidth are mutually exclusive per shard — calling
-// EnableAdditionalBandwidth(NodeId="All", Bandwidth=0) without preserving
-// existing individual shard bandwidths silently wipes them. To preserve individual shard
-// additional bandwidth on shards that have it, we read the current state and
-// pass the shard IDs and bandwidths through.
-//
-// If any shard has additional bandwidth set, we include those shard IDs and
-// their bandwidth values in the call alongside NodeId="All" for burst.
+// Enabling burst on "All" wipes any existing individual shard additional
+// bandwidth. If both burst and individual shard bandwidth resources are used
+// on the same instance, add depends_on to the individual shard resource to
+// ensure it runs AFTER burst — the per-shard call naturally preserves burst
+// on sibling shards.
 func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst bool) error {
 	burstStr := "false"
 	if burst {
 		burstStr = "true"
 	}
 
-	// Read current individual shard bandwidths to preserve them.
-	shards, _, _ := kvstoreReadAllShardBandwidths(r.client, instanceId)
-
-	queries := map[string]any{
+	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", map[string]any{
 		"InstanceId":     tea.String(instanceId),
 		"NodeId":         tea.String("All"),
 		"Bandwidth":      tea.String("0"),
 		"BandWidthBurst": tea.String(burstStr),
 		"ChargeType":     tea.String("PostPaid"),
 		"AutoPay":        tea.String("true"),
-	}
-
-	// If shards have individual shard additional bandwidth, include their IDs and
-	// bandwidth values so the API preserves them. The API accepts multiple
-	// shard IDs comma-separated in NodeId, with matching Bandwidth values.
-	if len(shards) > 0 {
-		var nodeIds []string
-		var bwVals []string
-		for _, s := range shards {
-			if s.AdditionalBw > 0 {
-				nodeIds = append(nodeIds, s.ShardId)
-				bwVals = append(bwVals, fmt.Sprintf("%d", s.AdditionalBw))
-			}
-		}
-		if len(nodeIds) > 0 {
-			queries["NodeId"] = tea.String("All," + strings.Join(nodeIds, ","))
-			queries["Bandwidth"] = tea.String("0," + strings.Join(bwVals, ","))
-		}
-	}
-
-	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", queries)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to set elastic burst for instance %s: %w", instanceId, err)
 	}
@@ -267,6 +240,7 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
 		return fmt.Errorf("burst set but instance %s did not return to Normal: %w", instanceId, waitErr)
 	}
+
 	return nil
 }
 

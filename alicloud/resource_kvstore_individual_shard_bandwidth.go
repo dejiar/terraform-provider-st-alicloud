@@ -3,11 +3,13 @@ package alicloud
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -66,10 +68,17 @@ func (r *kvstoreIndividualShardBandwidthResource) Schema(_ context.Context, _ re
 			},
 			"shard_id": schema.StringAttribute{
 				Description: "The shard (node) ID in InsName format (e.g. `r-xxx-db-0`). " +
-					"Use `DescribeRoleZoneInfo` or `DescribeLogicInstanceTopology` to list available shard IDs.",
+					"Use `DescribeRoleZoneInfo` or `DescribeLogicInstanceTopology` to list available shard IDs. " +
+					"Must match the pattern `r-<instance_id>-db-<N>` (with hyphens around `db`).",
 				Required: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^r-[a-z0-9]+-db-\d+$`),
+						"shard_id must match the pattern r-<instance_id>-db-<N> (e.g. r-xxxxx-db-0). Ensure hyphens around 'db'.",
+					),
 				},
 			},
 			"bandwidth": schema.Int64Attribute{
@@ -259,32 +268,19 @@ func makeShardId(instanceId, shardId string) string {
 // setBandwidth calls EnableAdditionalBandwidth with the given shard ID and bandwidth.
 // bandwidth=0 resets the shard to default (used by Delete).
 //
-// CRITICAL: Before the API call, reads the current burst state for the instance.
-// Per-shard bandwidth and burst are mutually exclusive per shard — calling
-// EnableAdditionalBandwidth on a shard without BandWidthBurst silently disables
-// burst on that shard. To preserve burst on shards that still have it, we read
-// the instance-level burst value and pass it through.
-//
-// If burst is currently enabled at instance level (NodeId="All"), we keep
-// BandWidthBurst=true so the API preserves it on the target shard's sibling
-// shards. The target shard itself switches from burst to individual shard additional.
+// Per-shard bandwidth and burst are mutually exclusive per shard: setting
+// per-shard bandwidth on a shard disables burst on THAT shard only. Sibling
+// shards keep their burst state. No BandWidthBurst parameter is needed —
+// omitting it preserves burst on siblings.
 func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shardId string, bandwidth int64) error {
 	bwStr := fmt.Sprintf("%d", bandwidth)
 
-	// Read current burst state to preserve it on sibling shards.
-	burstBw, _ := kvstoreReadBurstValue(r.client, instanceId)
-	burstStr := "false"
-	if burstBw > 0 {
-		burstStr = "true"
-	}
-
 	queries := map[string]any{
-		"InstanceId":     tea.String(instanceId),
-		"NodeId":         tea.String(shardId),
-		"Bandwidth":      tea.String(bwStr),
-		"BandWidthBurst": tea.String(burstStr),
-		"ChargeType":     tea.String("PostPaid"),
-		"AutoPay":        tea.String("true"),
+		"InstanceId":  tea.String(instanceId),
+		"NodeId":      tea.String(shardId),
+		"Bandwidth":   tea.String(bwStr),
+		"ChargeType":  tea.String("PostPaid"),
+		"AutoPay":     tea.String("true"),
 	}
 
 	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", queries)

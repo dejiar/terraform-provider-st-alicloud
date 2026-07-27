@@ -67,4 +67,4 @@ terraform import st-alicloud_kvstore_individual_shard_bandwidth.shard_0 r-xxxxx:
 * This resource uses the `EnableAdditionalBandwidth` API with `NodeId` set to the shard's InsName.
 * Deleting the resource resets the shard's bandwidth to default (0 additional).
 * The API may take 2-4 minutes to complete as the instance goes through `Changing` → `Normal` status.
-* If applying this resource together with `st-alicloud_kvstore_elastic_burst_bandwidth` on the same instance, the provider retries on concurrent operation errors. Use `depends_on` for cleaner sequential ordering.
+* If applying this resource together with `st-alicloud_kvstore_elastic_burst_bandwidth` on the same instance, add `depends_on = [st-alicloud_kvstore_elastic_burst_bandwidth.burst]` to this resource. Enabling burst wipes per-shard bandwidth, so per-shard must run **after** burst. The per-shard call naturally preserves burst on sibling shards — do NOT include `BandWidthBurst` in the API call (it breaks burst on siblings).
