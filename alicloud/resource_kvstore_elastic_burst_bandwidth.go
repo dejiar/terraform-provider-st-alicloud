@@ -216,20 +216,21 @@ func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, 
 // setBurst calls EnableAdditionalBandwidth with NodeId="All" to toggle burst.
 //
 // The API requires a Bandwidth parameter even when only toggling burst.
-// Passing Bandwidth=0 wipes existing per-shard additional bandwidth on ALL
-// shards. To preserve per-shard settings, we read the current additional
-// bandwidth from the first shard and pass that value. If no per-shard
-// bandwidth is configured (or read fails), we fall back to 0.
+// Bandwidth=0 on NodeId="All" wipes existing per-shard additional bandwidth.
+// To preserve the current state, we read the total additional bandwidth
+// (IntranetBandwidth - default) and pass that same value.
 func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst bool) error {
 	burstStr := "false"
 	if burst {
 		burstStr = "true"
 	}
 
-	// Read current per-shard additional bandwidth to preserve it.
-	// Bandwidth=0 on NodeId="All" resets all shards — we must pass the
-	// existing value instead.
-	preserveBw := r.readPreserveBandwidth(instanceId)
+	// Read current total additional bandwidth to preserve it.
+	// EnableAdditionalBandwidth(NodeId="All", Bandwidth=X) sets the TOTAL
+	// instance additional bandwidth to X. Passing 0 wipes per-shard settings.
+	// We read IntranetBandwidth (total) and subtract the default to get the
+	// current additional total, then pass that back.
+	preserveBw := r.readTotalAdditionalBandwidth(instanceId)
 
 	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", map[string]any{
 		"InstanceId":     tea.String(instanceId),
@@ -265,31 +266,31 @@ func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, bu
 	return nil
 }
 
-// readPreserveBandwidth reads the current per-shard additional bandwidth so it
-// can be preserved when toggling burst. EnableAdditionalBandwidth(NodeId="All",
-// Bandwidth=0) wipes per-shard settings — passing the existing value avoids this.
+// readTotalAdditionalBandwidth reads the current total additional bandwidth
+// of the instance. EnableAdditionalBandwidth(NodeId="All", Bandwidth=X) sets
+// the TOTAL instance additional bandwidth — so we must read and pass back the
+// current total additional, not per-shard.
 //
-// For cluster instances, uses DescribeLogicInstanceTopology.
-// For standard instances, uses DescribeRoleZoneInfo.
-// Returns 0 if no per-shard bandwidth is configured or read fails (non-fatal).
-func (r *kvstoreElasticBurstBandwidthResource) readPreserveBandwidth(instanceId string) int64 {
-	// Try cluster topology first.
-	shards, _, err := kvstoreReadAllShardBandwidths(r.client, instanceId)
-	if err == nil && len(shards) > 0 {
-		// Return the max additional bandwidth across shards.
-		// EnableAdditionalBandwidth with NodeId="All" applies the same
-		// bandwidth to all shards, so we use the max to avoid downgrading any shard.
-		var maxBw int64
-		for _, s := range shards {
-			if s.AdditionalBw > maxBw {
-				maxBw = s.AdditionalBw
-			}
-		}
-		return maxBw
+// total additional = IntranetBandwidth (from DescribeIntranetAttribute) - default bandwidth
+//
+// Default bandwidth = instance Bandwidth field / ShardCount (per-shard base).
+// For non-cluster instances, default = Bandwidth field directly.
+//
+// Returns 0 if read fails (non-fatal — burst toggle still works, just resets additional BW).
+func (r *kvstoreElasticBurstBandwidthResource) readTotalAdditionalBandwidth(instanceId string) int64 {
+	// 1. Read IntranetBandwidth (total current bandwidth including additional).
+	intranetBody, err := kvstoreRawCall(r.client, "DescribeIntranetAttribute", map[string]any{
+		"InstanceId": tea.String(instanceId),
+	})
+	if err != nil {
+		return 0
+	}
+	totalCurrentBw := toInt64(intranetBody["IntranetBandwidth"])
+	if totalCurrentBw <= 0 {
+		return 0
 	}
 
-	// Fall back to DescribeRoleZoneInfo for non-cluster instances.
-	// Read instance to get base bandwidth.
+	// 2. Read instance default bandwidth (the base, without additional).
 	instBody, err := kvstoreRawCall(r.client, "DescribeInstances", map[string]any{
 		"InstanceIds": tea.String(instanceId),
 	})
@@ -308,40 +309,12 @@ func (r *kvstoreElasticBurstBandwidthResource) readPreserveBandwidth(instanceId 
 	if !ok {
 		return 0
 	}
-	totalBw := toInt64(inst["Bandwidth"])
-	shardCount := toInt64(inst["ShardCount"])
-	if shardCount <= 0 {
-		shardCount = 1
-	}
-	baseBw := totalBw / shardCount
+	defaultBw := toInt64(inst["Bandwidth"])
 
-	// Read node bandwidth.
-	nodeBody, err := kvstoreRawCall(r.client, "DescribeRoleZoneInfo", map[string]any{
-		"InstanceId": tea.String(instanceId),
-	})
-	if err != nil {
-		return 0
+	// 3. total additional = current total - default.
+	additional := totalCurrentBw - defaultBw
+	if additional < 0 {
+		additional = 0
 	}
-	nodeContainer, ok := nodeBody["Node"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	nodes, ok := nodeContainer["NodeInfo"].([]any)
-	if !ok {
-		return 0
-	}
-
-	var maxAdditional int64
-	for _, n := range nodes {
-		node, ok := n.(map[string]any)
-		if !ok {
-			continue
-		}
-		currentBw := toInt64(node["CurrentBandWidth"])
-		additional := currentBw - baseBw
-		if additional > maxAdditional {
-			maxAdditional = additional
-		}
-	}
-	return maxAdditional
+	return additional
 }
