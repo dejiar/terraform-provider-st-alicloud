@@ -281,8 +281,10 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 		return "", "", fmt.Errorf("no NodeInfo in DescribeRoleZoneInfo response")
 	}
 
-	// Collect master shards only (DescribeRoleZoneInfo returns both master
-	// and slave for each shard; bandwidth is identical, take master).
+	// Collect one entry per unique InsName. DescribeRoleZoneInfo returns both
+	// MASTER and SLAVE for each shard with identical bandwidth — take the
+	// first occurrence (whichever role appears first).
+	seen := make(map[string]bool)
 	type shardBw struct {
 		InsName   string
 		CurrentBw int64
@@ -294,14 +296,11 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 		if !ok {
 			continue
 		}
-		role, _ := node["Role"].(string)
-		if role != "master" {
-			continue
-		}
 		insName, _ := node["InsName"].(string)
-		if insName == "" {
+		if insName == "" || seen[insName] {
 			continue
 		}
+		seen[insName] = true
 		shards = append(shards, shardBw{
 			InsName:   insName,
 			CurrentBw: toInt64(node["CurrentBandWidth"]),
