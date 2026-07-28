@@ -213,35 +213,45 @@ func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, 
 
 // --- API helpers ---
 
-// setBurst calls EnableAdditionalBandwidth with NodeId="All" to toggle burst.
+// setBurst toggles elastic burst bandwidth while preserving the existing
+// bandwidth configuration (instance-level or per-shard).
 //
-// The API requires a Bandwidth parameter even when only toggling burst.
-// Bandwidth=0 on NodeId="All" wipes existing per-shard additional bandwidth.
-// To preserve the current state, we read the total additional bandwidth
-// (IntranetBandwidth - default) and pass that same value.
+// Before any API call, we read DescribeRoleZoneInfo to classify the current
+// state into one of three scenarios:
+//
+//  1. No adjustment — all shards have current == default.
+//     → NodeId="All", Bandwidth="0"
+//  2. Instance-level adjustment — all shards have current != default,
+//     but all shards share the same current value.
+//     → NodeId="All", Bandwidth="current-default"
+//  3. Per-shard adjustment — shards have different current values.
+//     → NodeId="r-xxx-db-0,r-xxx-db-1,...", Bandwidth="bw0,bw1,..."
+//     where each bwN = currentN - defaultN for that shard.
+//
+// After determining the NodeId + Bandwidth pair, we call
+// EnableAdditionalBandwidth with the appropriate BandWidthBurst flag.
 func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst bool) error {
 	burstStr := "false"
 	if burst {
 		burstStr = "true"
 	}
 
-	// Read current total additional bandwidth to preserve it.
-	// EnableAdditionalBandwidth(NodeId="All", Bandwidth=X) sets the TOTAL
-	// instance additional bandwidth to X. Passing 0 wipes per-shard settings.
-	// We read IntranetBandwidth (total) and subtract the default to get the
-	// current additional total, then pass that back.
-	preserveBw := r.readTotalAdditionalBandwidth(instanceId)
+	nodeId, bandwidth, err := r.classifyAndBuildBwParams(instanceId)
+	if err != nil {
+		return fmt.Errorf("failed to classify bandwidth state for instance %s: %w", instanceId, err)
+	}
 
-	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", map[string]any{
+	_, err = kvstoreRawCall(r.client, "EnableAdditionalBandwidth", map[string]any{
 		"InstanceId":     tea.String(instanceId),
-		"NodeId":         tea.String("All"),
-		"Bandwidth":      tea.String(strconv.FormatInt(preserveBw, 10)),
+		"NodeId":         tea.String(nodeId),
+		"Bandwidth":      tea.String(bandwidth),
 		"BandWidthBurst": tea.String(burstStr),
 		"ChargeType":     tea.String("PostPaid"),
 		"AutoPay":        tea.String("true"),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to set elastic burst for instance %s: %w", instanceId, err)
+		return fmt.Errorf("failed to set elastic burst for instance %s (NodeId=%s, Bandwidth=%s): %w",
+			instanceId, nodeId, bandwidth, err)
 	}
 
 	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
@@ -249,6 +259,104 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 	}
 
 	return nil
+}
+
+// classifyAndBuildBwParams reads DescribeRoleZoneInfo and determines the
+// correct NodeId and Bandwidth parameters to preserve the current bandwidth
+// state when toggling burst. See setBurst docs for the three scenarios.
+func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
+	body, err := kvstoreRawCall(r.client, "DescribeRoleZoneInfo", map[string]any{
+		"InstanceId": tea.String(instanceId),
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("DescribeRoleZoneInfo failed: %w", err)
+	}
+
+	nodeContainer, ok := body["Node"].(map[string]any)
+	if !ok {
+		return "", "", fmt.Errorf("no Node in DescribeRoleZoneInfo response")
+	}
+	nodes, ok := nodeContainer["NodeInfo"].([]any)
+	if !ok || len(nodes) == 0 {
+		return "", "", fmt.Errorf("no NodeInfo in DescribeRoleZoneInfo response")
+	}
+
+	// Collect master shards only (DescribeRoleZoneInfo returns both master
+	// and slave for each shard; bandwidth is identical, take master).
+	type shardBw struct {
+		InsName   string
+		CurrentBw int64
+		DefaultBw int64
+	}
+	var shards []shardBw
+	for _, n := range nodes {
+		node, ok := n.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := node["Role"].(string)
+		if role != "master" {
+			continue
+		}
+		insName, _ := node["InsName"].(string)
+		if insName == "" {
+			continue
+		}
+		shards = append(shards, shardBw{
+			InsName:   insName,
+			CurrentBw: toInt64(node["CurrentBandWidth"]),
+			DefaultBw: toInt64(node["DefaultBandWidth"]),
+		})
+	}
+
+	if len(shards) == 0 {
+		return "", "", fmt.Errorf("no master shards found in DescribeRoleZoneInfo")
+	}
+
+	// Scenario 1: all shards current == default → no bandwidth adjustment.
+	allMatchDefault := true
+	for _, s := range shards {
+		if s.CurrentBw != s.DefaultBw {
+			allMatchDefault = false
+			break
+		}
+	}
+	if allMatchDefault {
+		return "All", "0", nil
+	}
+
+	// Scenario 2: all shards current != default AND all current values are the same.
+	// This is instance-level adjustment.
+	allSameCurrent := true
+	firstCurrent := shards[0].CurrentBw
+	firstDefault := shards[0].DefaultBw
+	for _, s := range shards {
+		if s.CurrentBw != firstCurrent || s.DefaultBw != firstDefault {
+			allSameCurrent = false
+			break
+		}
+	}
+	if allSameCurrent {
+		additional := firstCurrent - firstDefault
+		if additional < 0 {
+			additional = 0
+		}
+		return "All", strconv.FormatInt(additional, 10), nil
+	}
+
+	// Scenario 3: per-shard adjustment — shards have different current values.
+	// Build comma-separated NodeId and Bandwidth lists.
+	var ids []string
+	var bws []string
+	for _, s := range shards {
+		additional := s.CurrentBw - s.DefaultBw
+		if additional < 0 {
+			additional = 0
+		}
+		ids = append(ids, s.InsName)
+		bws = append(bws, strconv.FormatInt(additional, 10))
+	}
+	return strings.Join(ids, ","), strings.Join(bws, ","), nil
 }
 
 // verifyBurst reads back IntranetBandWidthBurst and confirms the burst state matches.
@@ -264,57 +372,4 @@ func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, bu
 		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d)", instanceId, burstBw)
 	}
 	return nil
-}
-
-// readTotalAdditionalBandwidth reads the current total additional bandwidth
-// of the instance. EnableAdditionalBandwidth(NodeId="All", Bandwidth=X) sets
-// the TOTAL instance additional bandwidth — so we must read and pass back the
-// current total additional, not per-shard.
-//
-// total additional = IntranetBandwidth (from DescribeIntranetAttribute) - default bandwidth
-//
-// Default bandwidth = instance Bandwidth field / ShardCount (per-shard base).
-// For non-cluster instances, default = Bandwidth field directly.
-//
-// Returns 0 if read fails (non-fatal — burst toggle still works, just resets additional BW).
-func (r *kvstoreElasticBurstBandwidthResource) readTotalAdditionalBandwidth(instanceId string) int64 {
-	// 1. Read IntranetBandwidth (total current bandwidth including additional).
-	intranetBody, err := kvstoreRawCall(r.client, "DescribeIntranetAttribute", map[string]any{
-		"InstanceId": tea.String(instanceId),
-	})
-	if err != nil {
-		return 0
-	}
-	totalCurrentBw := toInt64(intranetBody["IntranetBandwidth"])
-	if totalCurrentBw <= 0 {
-		return 0
-	}
-
-	// 2. Read instance default bandwidth (the base, without additional).
-	instBody, err := kvstoreRawCall(r.client, "DescribeInstances", map[string]any{
-		"InstanceIds": tea.String(instanceId),
-	})
-	if err != nil {
-		return 0
-	}
-	instsContainer, ok := instBody["Instances"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	insts, ok := instsContainer["KVStoreInstance"].([]any)
-	if !ok || len(insts) == 0 {
-		return 0
-	}
-	inst, ok := insts[0].(map[string]any)
-	if !ok {
-		return 0
-	}
-	defaultBw := toInt64(inst["Bandwidth"])
-
-	// 3. total additional = current total - default.
-	additional := totalCurrentBw - defaultBw
-	if additional < 0 {
-		additional = 0
-	}
-	return additional
 }
