@@ -10,7 +10,6 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -22,9 +21,8 @@ import (
 )
 
 var (
-	_ resource.Resource                = &kvstoreIndividualShardBandwidthResource{}
-	_ resource.ResourceWithConfigure   = &kvstoreIndividualShardBandwidthResource{}
-	_ resource.ResourceWithImportState = &kvstoreIndividualShardBandwidthResource{}
+	_ resource.Resource              = &kvstoreIndividualShardBandwidthResource{}
+	_ resource.ResourceWithConfigure = &kvstoreIndividualShardBandwidthResource{}
 )
 
 func NewKvstoreIndividualShardBandwidthResource() resource.Resource {
@@ -298,21 +296,6 @@ func (r *kvstoreIndividualShardBandwidthResource) Delete(ctx context.Context, re
 		)
 		return
 	}
-}
-
-func (r *kvstoreIndividualShardBandwidthResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Format: instance_id:shard_id
-	parts := strings.SplitN(req.ID, ":", 2)
-	if len(parts) != 2 {
-		resp.Diagnostics.AddError(
-			"Invalid import ID format",
-			"Expected format: instance_id:shard_id (e.g. r-xxxxx:r-xxxxx-db-0)",
-		)
-		return
-	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_id"), types.StringValue(parts[0]))...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("shard_id"), types.StringValue(parts[1]))...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
 // --- API helpers ---
