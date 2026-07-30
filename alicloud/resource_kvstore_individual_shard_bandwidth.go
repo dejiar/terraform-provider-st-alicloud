@@ -82,9 +82,10 @@ func (r *kvstoreIndividualShardBandwidthResource) Schema(_ context.Context, _ re
 				},
 			},
 			"bandwidth": schema.Int64Attribute{
-				Description: "Additional bandwidth in MB/s for the shard. Must be a positive integer (>= 1). " +
-					"The max individual shard additional bandwidth is `IntranetBandWidthBurst - DefaultBandWidth` " +
-					"(both read from the API). Validate this in your Terraform `variable` `validation` blocks.",
+				Description: "Total desired bandwidth in MB/s for the shard (default + additional). " +
+					"The provider reads DefaultBandWidth from the API and calculates the additional " +
+					"bandwidth to purchase. Must be >= DefaultBandWidth. " +
+					"Example: if DefaultBandWidth is 48 and you set 50, the provider purchases 2 MB/s additional.",
 				Required: true,
 				Validators: []validator.Int64{
 					int64validator.AtLeast(1),
@@ -113,9 +114,39 @@ func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, re
 
 	instanceId := plan.InstanceId.ValueString()
 	shardId := plan.ShardId.ValueString()
-	bandwidth := plan.Bandwidth.ValueInt64()
+	desiredBw := plan.Bandwidth.ValueInt64()
 
-	if err := r.setBandwidth(instanceId, shardId, bandwidth); err != nil {
+	// Read DefaultBandWidth from API to calculate additional bandwidth.
+	_, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"[API ERROR] Failed to read DefaultBandWidth for shard.",
+			fmt.Sprintf("instance: %s, shard: %s, error: %s", instanceId, shardId, err.Error()),
+		)
+		return
+	}
+
+	if desiredBw < defaultBw {
+		resp.Diagnostics.AddError(
+			"[VALIDATION ERROR] Bandwidth cannot be less than DefaultBandWidth.",
+			fmt.Sprintf("Requested %d MB/s but DefaultBandWidth is %d MB/s. Set bandwidth >= %d.",
+				desiredBw, defaultBw, defaultBw),
+		)
+		return
+	}
+
+	additionalBw := desiredBw - defaultBw
+
+	if additionalBw == 0 {
+		resp.Diagnostics.AddError(
+			"[VALIDATION ERROR] Bandwidth equals DefaultBandWidth.",
+			fmt.Sprintf("Requested %d MB/s equals DefaultBandWidth %d MB/s — no additional bandwidth to purchase. Set bandwidth > %d.",
+				desiredBw, defaultBw, defaultBw),
+		)
+		return
+	}
+
+	if err := r.setBandwidth(instanceId, shardId, additionalBw); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to set Redis individual shard bandwidth.",
 			err.Error(),
@@ -123,7 +154,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, re
 		return
 	}
 
-	if err := r.verifyBandwidth(instanceId, shardId, bandwidth); err != nil {
+	if err := r.verifyBandwidth(instanceId, shardId, desiredBw, defaultBw); err != nil {
 		resp.Diagnostics.AddError(
 			"[VERIFY ERROR] Apply succeeded but read-back verification failed.",
 			err.Error(),
@@ -151,7 +182,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 	instanceId := state.InstanceId.ValueString()
 	shardId := state.ShardId.ValueString()
 
-	currentBw, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	currentBw, _, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		// Instance or shard may be gone — remove from state.
 		errStr := strings.ToLower(err.Error())
@@ -170,14 +201,10 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 
 	state.Id = types.StringValue(makeShardId(instanceId, shardId))
 
-	// During import, bandwidth is null — compute from API.
+	// During import, bandwidth is null — compute total from API.
 	// Otherwise keep the plan/state value (do NOT override — prevents diff loops).
 	if state.Bandwidth.IsNull() {
-		additional := currentBw - defaultBw
-		if additional < 0 {
-			additional = 0
-		}
-		state.Bandwidth = types.Int64Value(additional)
+		state.Bandwidth = types.Int64Value(currentBw)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -193,9 +220,39 @@ func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, re
 
 	instanceId := plan.InstanceId.ValueString()
 	shardId := plan.ShardId.ValueString()
-	bandwidth := plan.Bandwidth.ValueInt64()
+	desiredBw := plan.Bandwidth.ValueInt64()
 
-	if err := r.setBandwidth(instanceId, shardId, bandwidth); err != nil {
+	// Read DefaultBandWidth from API to calculate additional bandwidth.
+	_, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"[API ERROR] Failed to read DefaultBandWidth for shard.",
+			fmt.Sprintf("instance: %s, shard: %s, error: %s", instanceId, shardId, err.Error()),
+		)
+		return
+	}
+
+	if desiredBw < defaultBw {
+		resp.Diagnostics.AddError(
+			"[VALIDATION ERROR] Bandwidth cannot be less than DefaultBandWidth.",
+			fmt.Sprintf("Requested %d MB/s but DefaultBandWidth is %d MB/s. Set bandwidth >= %d.",
+				desiredBw, defaultBw, defaultBw),
+		)
+		return
+	}
+
+	additionalBw := desiredBw - defaultBw
+
+	if additionalBw == 0 {
+		resp.Diagnostics.AddError(
+			"[VALIDATION ERROR] Bandwidth equals DefaultBandWidth.",
+			fmt.Sprintf("Requested %d MB/s equals DefaultBandWidth %d MB/s — no additional bandwidth to purchase. Set bandwidth > %d.",
+				desiredBw, defaultBw, defaultBw),
+		)
+		return
+	}
+
+	if err := r.setBandwidth(instanceId, shardId, additionalBw); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to update Redis individual shard bandwidth.",
 			err.Error(),
@@ -203,7 +260,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, re
 		return
 	}
 
-	if err := r.verifyBandwidth(instanceId, shardId, bandwidth); err != nil {
+	if err := r.verifyBandwidth(instanceId, shardId, desiredBw, defaultBw); err != nil {
 		resp.Diagnostics.AddError(
 			"[VERIFY ERROR] Update succeeded but read-back verification failed.",
 			err.Error(),
@@ -295,20 +352,16 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 }
 
 // verifyBandwidth reads back the shard bandwidth and confirms the requested
-// value took effect. Catches cases where the API returns success but the
+// total value took effect. Catches cases where the API returns success but the
 // change was silently ignored.
-func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, bandwidth int64) error {
-	currentBw, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, desiredBw, defaultBw int64) error {
+	currentBw, _, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		return fmt.Errorf("failed to read node bandwidth for verification: %w", err)
 	}
-	actual := currentBw - defaultBw
-	if actual < 0 {
-		actual = 0
-	}
-	if actual != bandwidth {
-		return fmt.Errorf("bandwidth mismatch for shard %s: requested %d MB/s, got %d MB/s (CurrentBandWidth=%d, DefaultBandWidth=%d)",
-			shardId, bandwidth, actual, currentBw, defaultBw)
+	if currentBw != desiredBw {
+		return fmt.Errorf("bandwidth mismatch for shard %s: requested %d MB/s total, got %d MB/s (DefaultBandWidth=%d, additional=%d)",
+			shardId, desiredBw, currentBw, defaultBw, desiredBw-defaultBw)
 	}
 	return nil
 }
