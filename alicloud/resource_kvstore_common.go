@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	util "github.com/alibabacloud-go/tea-utils/v2/service"
@@ -15,108 +14,8 @@ import (
 	openapiutil "github.com/alibabacloud-go/openapi-util/service"
 )
 
-// kvstoreShardBw holds the bandwidth state of a single shard, read from
-// DescribeLogicInstanceTopology. AdditionalBw is the individual shard additional
-// bandwidth (current - base), or 0 if burst is active on the shard (burst
-// replaces additional bandwidth — they are mutually exclusive per shard).
-type kvstoreShardBw struct {
-	ShardId      string // e.g. "r-xxx-db-0" (NodeId with # suffix stripped)
-	CurrentBw    int64  // total bandwidth shown in topology
-	AdditionalBw int64  // individual shard additional bandwidth (0 if burst active)
-}
-
-// kvstoreReadAllShardBandwidths reads the current individual shard bandwidth state
-// from DescribeLogicInstanceTopology. Returns the list of shards (master nodes
-// only) and the base bandwidth per shard.
-//
-// Used by the burst resource to preserve existing individual shard bandwidth settings
-// when toggling burst — without this, EnableAdditionalBandwidth(NodeId="All",
-// Bandwidth=0) silently wipes individual shard additional bandwidth.
-func kvstoreReadAllShardBandwidths(client *alicloudOpenapiClient.Client, instanceId string) ([]kvstoreShardBw, int64, error) {
-	// 1. Read instance-level Bandwidth + ShardCount to calculate base per shard.
-	instBody, err := kvstoreRawCall(client, "DescribeInstances", map[string]any{
-		"InstanceIds": tea.String(instanceId),
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read instance %s: %w", instanceId, err)
-	}
-	instsContainer, ok := instBody["Instances"].(map[string]any)
-	if !ok {
-		return nil, 0, fmt.Errorf("no Instances in response for %s", instanceId)
-	}
-	insts, ok := instsContainer["KVStoreInstance"].([]any)
-	if !ok || len(insts) == 0 {
-		return nil, 0, fmt.Errorf("instance %s not found", instanceId)
-	}
-	inst, ok := insts[0].(map[string]any)
-	if !ok {
-		return nil, 0, fmt.Errorf("invalid instance response for %s", instanceId)
-	}
-	totalBw := toInt64(inst["Bandwidth"])
-	shardCount := toInt64(inst["ShardCount"])
-	if shardCount <= 0 {
-		shardCount = 1
-	}
-	baseBw := totalBw / shardCount
-
-	// 2. Read shard topology.
-	topo, err := kvstoreRawCall(client, "DescribeLogicInstanceTopology", map[string]any{
-		"InstanceId": tea.String(instanceId),
-	})
-	if err != nil {
-		return nil, baseBw, fmt.Errorf("failed to read topology for %s: %w", instanceId, err)
-	}
-
-	shardList, ok := topo["RedisShardList"].(map[string]any)
-	if !ok {
-		return nil, baseBw, nil // no shards (standard instance)
-	}
-	nodes, ok := shardList["NodeInfo"].([]any)
-	if !ok {
-		return nil, baseBw, nil
-	}
-
-	// 3. Extract master db nodes and compute additional bandwidth.
-	var result []kvstoreShardBw
-	for _, n := range nodes {
-		node, ok := n.(map[string]any)
-		if !ok {
-			continue
-		}
-		if nodeType, _ := node["NodeType"].(string); nodeType != "db" {
-			continue
-		}
-		if subType, _ := node["SubInstanceType"].(string); subType != "master" {
-			continue
-		}
-		nodeIdRaw, _ := node["NodeId"].(string)
-		shardId := nodeIdRaw
-		if idx := strings.Index(shardId, "#"); idx > 0 {
-			shardId = shardId[:idx]
-		}
-		currentBw := toInt64(node["Bandwidth"])
-		additional := currentBw - baseBw
-		if additional < 0 {
-			additional = 0
-		}
-		// If current >= base * 4, burst is active on this shard — burst
-		// replaces additional bandwidth, so additional is 0.
-		if baseBw > 0 && currentBw >= baseBw*4 {
-			additional = 0
-		}
-		result = append(result, kvstoreShardBw{
-			ShardId:      shardId,
-			CurrentBw:    currentBw,
-			AdditionalBw: additional,
-		})
-	}
-
-	return result, baseBw, nil
-}
-
 // kvstoreRawCall performs a raw CallApi against the R-Kvstore API using the v2
-// openapi client (the v1 SDK client's CallApi signing is broken — see the
-// alibaba-cloud skill reference). Retries on transient errors via isAbleToRetry.
+// openapi client. Retries on transient errors via isAbleToRetry.
 // Returns the response body (map[string]any) extracted from under the "body" key.
 func kvstoreRawCall(client *alicloudOpenapiClient.Client, action string, queries map[string]any) (map[string]any, error) {
 	callFn := func() (map[string]any, error) {
