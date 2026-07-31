@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -19,9 +18,8 @@ import (
 )
 
 var (
-	_ resource.Resource                = &kvstoreElasticBurstBandwidthResource{}
-	_ resource.ResourceWithConfigure   = &kvstoreElasticBurstBandwidthResource{}
-	_ resource.ResourceWithImportState = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.Resource              = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.ResourceWithConfigure = &kvstoreElasticBurstBandwidthResource{}
 )
 
 func NewKvstoreElasticBurstBandwidthResource() resource.Resource {
@@ -201,12 +199,6 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 		)
 		return
 	}
-}
-
-func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Format: instance_id
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_id"), types.StringValue(req.ID))...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
 // --- API helpers ---
