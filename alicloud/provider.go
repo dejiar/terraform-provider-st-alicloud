@@ -20,14 +20,12 @@ import (
 	alicloudCmsClient "github.com/alibabacloud-go/cms-20190101/v8/client"
 	alicloudCsClient "github.com/alibabacloud-go/cs-20151215/v4/client"
 	alicloudOpenapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
-	alicloudOpenapiClientV1 "github.com/alibabacloud-go/darabonba-openapi/client"
 	alicloudAntiddosClient "github.com/alibabacloud-go/ddoscoo-20200101/v4/client"
 	alicloudEcdClient "github.com/alibabacloud-go/ecd-20200930/v5/client"
 	alicloudEmrClient "github.com/alibabacloud-go/emr-20210320/v3/client"
 	alicloudEssClient "github.com/alibabacloud-go/ess-20220222/v2/client"
 	alicloudFoasconsoleClient "github.com/alibabacloud-go/foasconsole-20211028/v2/client"
 	alicloudImsClient "github.com/alibabacloud-go/ims-20190815/v4/client"
-	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/client"
 	alicloudRamClient "github.com/alibabacloud-go/ram-20150501/v2/client"
 	alicloudServicemeshClient "github.com/alibabacloud-go/servicemesh-20200111/v4/client"
 	alicloudSlbClient "github.com/alibabacloud-go/slb-20140515/v4/client"
@@ -54,7 +52,6 @@ type alicloudClients struct {
 	essClient         *alicloudEssClient.Client
 	servicemeshClient *alicloudServicemeshClient.Client
 	imsClient         *alicloudImsClient.Client
-	kvstoreClient     *alicloudKvstoreClient.Client
 	kvstoreRawClient  *alicloudOpenapiClient.Client
 	ververicaClient   *alicloudVvpClient.Client
 	foasconsoleClient *alicloudFoasconsoleClient.Client
@@ -419,39 +416,17 @@ func (p *alicloudProvider) Configure(ctx context.Context, req provider.Configure
 		return
 	}
 
-	// AliCloud R-Kvstore (Redis) Client
-	// r-kvstore SDK uses darabonba-openapi v1, not v2 — needs its own Config
-	kvstoreClientConfig := &alicloudOpenapiClientV1.Config{
-		RegionId:        &region,
-		AccessKeyId:     &accessKey,
-		AccessKeySecret: &secretKey,
-		Endpoint:        tea.String(fmt.Sprintf("r-kvstore.%s.aliyuncs.com", region)),
-	}
-	kvstoreClient, err := alicloudKvstoreClient.NewClient(kvstoreClientConfig)
+	// AliCloud R-Kvstore (Redis) Client — raw CallApi via v2 openapi client
+	// (v1 SDK lacks BandWidthBurst/ChargeType fields needed for burst/shard bandwidth)
+	kvstoreRawClientConfig := clientCredentialsConfig
+	kvstoreRawClientConfig.Endpoint = tea.String(fmt.Sprintf("r-kvstore.%s.aliyuncs.com", region))
+	kvstoreRawClient, err := alicloudOpenapiClient.NewClient(kvstoreRawClientConfig)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create AliCloud R-Kvstore API Client",
 			"An unexpected error occurred when creating the AliCloud R-Kvstore API client. "+
 				"If the error is not clear, please contact the provider developers.\n\n"+
 				"AliCloud R-Kvstore Client Error: "+err.Error(),
-		)
-		return
-	}
-
-	// v2 openapi client for raw CallApi calls to r-kvstore (v1 SDK lacks BandWidthBurst/ChargeType fields)
-	kvstoreRawClientConfig := &alicloudOpenapiClient.Config{
-		RegionId:        &region,
-		AccessKeyId:     &accessKey,
-		AccessKeySecret: &secretKey,
-		Endpoint:        tea.String(fmt.Sprintf("r-kvstore.%s.aliyuncs.com", region)),
-	}
-	kvstoreRawClient, err := alicloudOpenapiClient.NewClient(kvstoreRawClientConfig)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Unable to Create AliCloud R-Kvstore Raw API Client",
-			"An unexpected error occurred when creating the AliCloud R-Kvstore raw API client. "+
-				"If the error is not clear, please contact the provider developers.\n\n"+
-				"AliCloud R-Kvstore Raw Client Error: "+err.Error(),
 		)
 		return
 	}
@@ -525,7 +500,6 @@ func (p *alicloudProvider) Configure(ctx context.Context, req provider.Configure
 		essClient:         essClient,
 		servicemeshClient: servicemeshClient,
 		imsClient:         imsClient,
-		kvstoreClient:     kvstoreClient,
 		kvstoreRawClient:  kvstoreRawClient,
 		ecdClient:         ecdClient,
 		customEcdClient:   customEcdClient,
