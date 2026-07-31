@@ -15,7 +15,24 @@ import (
 func kvstoreRetry(fn func() error) error {
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxElapsedTime = 5 * time.Minute
-	return backoff.Retry(fn, bo)
+	return backoff.Retry(func() error {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			code := ""
+			if t.Code != nil {
+				code = *t.Code
+			}
+			if !isAbleToRetry(code) {
+				return backoff.Permanent(err)
+			}
+			return err // retryable
+		}
+		// Non-SDK error — don't retry.
+		return backoff.Permanent(err)
+	}, bo)
 }
 
 // kvstoreWaitForInstanceNormal polls DescribeInstances until the instance
@@ -26,8 +43,13 @@ func kvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 	pollInterval := 10 * time.Second
 
 	for time.Now().Before(deadline) {
-		resp, err := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
-			InstanceIds: tea.String(instanceId),
+		var resp *alicloudKvstoreClient.DescribeInstancesResponse
+		err := kvstoreRetry(func() error {
+			r, e := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+				InstanceIds: tea.String(instanceId),
+			})
+			resp = r
+			return e
 		})
 		if err == nil && resp != nil && resp.Body != nil && resp.Body.Instances != nil {
 			if kvInsts := resp.Body.Instances.KVStoreInstance; len(kvInsts) > 0 {
@@ -44,8 +66,13 @@ func kvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 // kvstoreReadBurstValue reads IntranetBandWidthBurst from DescribeIntranetAttribute.
 // Returns the burst cap in MB/s. 0 = burst disabled.
 func kvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId string) (int64, error) {
-	resp, err := client.DescribeIntranetAttribute(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
-		InstanceId: tea.String(instanceId),
+	var resp *alicloudKvstoreClient.DescribeIntranetAttributeResponse
+	err := kvstoreRetry(func() error {
+		r, e := client.DescribeIntranetAttribute(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
+			InstanceId: tea.String(instanceId),
+		})
+		resp = r
+		return e
 	})
 	if err != nil {
 		return 0, err
@@ -62,8 +89,13 @@ func kvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId stri
 // kvstoreReadNodeBandwidth reads individual shard bandwidth from DescribeRoleZoneInfo,
 // matching by InsName (e.g. "r-xxx-db-0"). Returns currentBw, defaultBw, isBwOpen.
 func kvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
-	resp, err := client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
-		InstanceId: tea.String(instanceId),
+	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
+	err = kvstoreRetry(func() error {
+		r, e := client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+			InstanceId: tea.String(instanceId),
+		})
+		resp = r
+		return e
 	})
 	if err != nil {
 		return 0, 0, false, fmt.Errorf("failed to read node bandwidth for shard %s: %w", shardId, err)
@@ -101,18 +133,8 @@ func kvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, 
 // kvstoreEnableAdditionalBandwidth calls EnableAdditionalBandwidth with retry.
 // Used for both burst and individual shard bandwidth.
 func kvstoreEnableAdditionalBandwidth(client *alicloudKvstoreClient.Client, req *alicloudKvstoreClient.EnableAdditionalBandwidthRequest) error {
-	callFn := func() error {
+	return kvstoreRetry(func() error {
 		_, err := client.EnableAdditionalBandwidth(req)
-		if err != nil {
-			if t, ok := err.(*tea.SDKError); ok && t.Code != nil {
-				if isAbleToRetry(*t.Code) {
-					return err
-				}
-				return backoff.Permanent(err)
-			}
-			return err
-		}
-		return nil
-	}
-	return kvstoreRetry(callFn)
+		return err
+	})
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -18,8 +19,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &kvstoreElasticBurstBandwidthResource{}
-	_ resource.ResourceWithConfigure = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.Resource                = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.ResourceWithConfigure   = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.ResourceWithImportState = &kvstoreElasticBurstBandwidthResource{}
 )
 
 func NewKvstoreElasticBurstBandwidthResource() resource.Resource {
@@ -124,8 +126,11 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 	instanceId := state.InstanceId.ValueString()
 
 	// Check instance still exists.
-	_, err := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
-		InstanceIds: tea.String(instanceId),
+	err := kvstoreRetry(func() error {
+		_, e := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+			InstanceIds: tea.String(instanceId),
+		})
+		return e
 	})
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
@@ -198,6 +203,12 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 	}
 }
 
+func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Format: instance_id
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_id"), types.StringValue(req.ID))...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
+}
+
 // --- API helpers ---
 
 // setBurst toggles elastic burst bandwidth while preserving the existing
@@ -233,8 +244,13 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 // correct NodeId and Bandwidth parameters to preserve the current bandwidth
 // state when toggling burst.
 func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
-	resp, err := r.client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
-		InstanceId: tea.String(instanceId),
+	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
+	err = kvstoreRetry(func() error {
+		r, e := r.client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+			InstanceId: tea.String(instanceId),
+		})
+		resp = r
+		return e
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("DescribeRoleZoneInfo failed: %w", err)
