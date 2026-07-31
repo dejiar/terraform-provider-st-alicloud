@@ -7,8 +7,8 @@ toolchain go1.24.10
 require (
 	github.com/alibabacloud-go/alidns-20150109/v4 v4.0.1
 	github.com/alibabacloud-go/cdn-20180510/v2 v2.0.9
-	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.1
-	github.com/alibabacloud-go/tea v1.5.0
+	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.2
+	github.com/alibabacloud-go/tea v1.5.1
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.9
 	github.com/hashicorp/terraform-plugin-framework v1.3.2
 	github.com/hashicorp/terraform-plugin-framework-validators v0.10.0
@@ -25,6 +25,7 @@ require (
 	github.com/alibabacloud-go/foasconsole-20211028/v2 v2.2.1
 	github.com/alibabacloud-go/ims-20190815/v4 v4.3.1
 	github.com/alibabacloud-go/openapi-util v0.1.1
+	github.com/alibabacloud-go/r-kvstore-20150101/v7 v7.4.0
 	github.com/alibabacloud-go/slb-20140515/v4 v4.0.1
 	github.com/alibabacloud-go/ververica-20220718 v1.10.1
 	github.com/cenkalti/backoff v2.2.1+incompatible

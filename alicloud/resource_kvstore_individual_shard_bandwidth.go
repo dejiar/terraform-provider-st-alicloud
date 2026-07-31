@@ -17,7 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	alicloudOpenapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
+	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/v7/client"
 )
 
 var (
@@ -30,7 +30,7 @@ func NewKvstoreIndividualShardBandwidthResource() resource.Resource {
 }
 
 type kvstoreIndividualShardBandwidthResource struct {
-	client *alicloudOpenapiClient.Client
+	client *alicloudKvstoreClient.Client
 }
 
 type kvstoreIndividualShardBandwidthModel struct {
@@ -97,7 +97,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Configure(_ context.Context, r
 	if req.ProviderData == nil {
 		return
 	}
-	r.client = req.ProviderData.(alicloudClients).kvstoreRawClient
+	r.client = req.ProviderData.(alicloudClients).kvstoreClient
 }
 
 // --- CRUD ---
@@ -182,7 +182,6 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 
 	currentBw, _, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
-		// Instance or shard may be gone — remove from state.
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "not found") ||
 			strings.Contains(errStr, "notfound") ||
@@ -199,8 +198,8 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 
 	state.Id = types.StringValue(makeShardId(instanceId, shardId))
 
-	// During import, bandwidth is null — compute total from API.
-	// Otherwise keep the plan/state value (do NOT override — prevents diff loops).
+	// Keep the plan/state value for bandwidth — do NOT override from API.
+	// The API read-back may be stale immediately after apply, causing diff loops.
 	if state.Bandwidth.IsNull() {
 		state.Bandwidth = types.Int64Value(currentBw)
 	}
@@ -286,9 +285,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Delete(ctx context.Context, re
 	instanceId := state.InstanceId.ValueString()
 	shardId := state.ShardId.ValueString()
 
-	// Reset shard bandwidth to 0 (default). Uses EnableAdditionalBandwidth with
-	// Bandwidth=0 — ModifyIntranetAttribute returns ModifyBandWidth.NotSupport
-	// for many instance types.
+	// Reset shard bandwidth to 0 (default).
 	if err := r.setBandwidth(instanceId, shardId, 0); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to reset Redis individual shard bandwidth.",
@@ -307,24 +304,16 @@ func makeShardId(instanceId, shardId string) string {
 
 // setBandwidth calls EnableAdditionalBandwidth with the given shard ID and bandwidth.
 // bandwidth=0 resets the shard to default (used by Delete).
-//
-// Per-shard bandwidth and burst are mutually exclusive per shard: setting
-// per-shard bandwidth on a shard disables burst on THAT shard only. Sibling
-// shards keep their burst state. No BandWidthBurst parameter is needed —
-// omitting it preserves burst on siblings.
 func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shardId string, bandwidth int64) error {
-	bwStr := fmt.Sprintf("%d", bandwidth)
-
-	queries := map[string]any{
-		"InstanceId":  tea.String(instanceId),
-		"NodeId":      tea.String(shardId),
-		"Bandwidth":   tea.String(bwStr),
-		"ChargeType":  tea.String("PostPaid"),
-		"AutoPay":     tea.String("true"),
+	req := &alicloudKvstoreClient.EnableAdditionalBandwidthRequest{
+		InstanceId:  tea.String(instanceId),
+		NodeId:      tea.String(shardId),
+		Bandwidth:   tea.String(fmt.Sprintf("%d", bandwidth)),
+		ChargeType:  tea.String("PostPaid"),
+		AutoPay:     tea.Bool(true),
 	}
 
-	_, err := kvstoreRawCall(r.client, "EnableAdditionalBandwidth", queries)
-	if err != nil {
+	if err := kvstoreEnableAdditionalBandwidth(r.client, req); err != nil {
 		return fmt.Errorf("failed to set individual shard bandwidth for instance %s shard %s: %w", instanceId, shardId, err)
 	}
 
@@ -335,8 +324,7 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 }
 
 // verifyBandwidth reads back the shard bandwidth and confirms the requested
-// total value took effect. Catches cases where the API returns success but the
-// change was silently ignored.
+// total value took effect.
 func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, desiredBw, defaultBw int64) error {
 	currentBw, _, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {

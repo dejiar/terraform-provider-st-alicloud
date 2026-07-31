@@ -26,6 +26,7 @@ import (
 	alicloudEssClient "github.com/alibabacloud-go/ess-20220222/v2/client"
 	alicloudFoasconsoleClient "github.com/alibabacloud-go/foasconsole-20211028/v2/client"
 	alicloudImsClient "github.com/alibabacloud-go/ims-20190815/v4/client"
+	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/v7/client"
 	alicloudRamClient "github.com/alibabacloud-go/ram-20150501/v2/client"
 	alicloudServicemeshClient "github.com/alibabacloud-go/servicemesh-20200111/v4/client"
 	alicloudSlbClient "github.com/alibabacloud-go/slb-20140515/v4/client"
@@ -52,7 +53,7 @@ type alicloudClients struct {
 	essClient         *alicloudEssClient.Client
 	servicemeshClient *alicloudServicemeshClient.Client
 	imsClient         *alicloudImsClient.Client
-	kvstoreRawClient  *alicloudOpenapiClient.Client
+	kvstoreClient     *alicloudKvstoreClient.Client
 	ververicaClient   *alicloudVvpClient.Client
 	foasconsoleClient *alicloudFoasconsoleClient.Client
 }
@@ -416,11 +417,10 @@ func (p *alicloudProvider) Configure(ctx context.Context, req provider.Configure
 		return
 	}
 
-	// AliCloud R-Kvstore (Redis) Client — raw CallApi via v2 openapi client
-	// (v1 SDK lacks BandWidthBurst/ChargeType fields needed for burst/shard bandwidth)
-	kvstoreRawClientConfig := clientCredentialsConfig
-	kvstoreRawClientConfig.Endpoint = tea.String(fmt.Sprintf("r-kvstore.%s.aliyuncs.com", region))
-	kvstoreRawClient, err := alicloudOpenapiClient.NewClient(kvstoreRawClientConfig)
+	// AliCloud R-Kvstore (Redis) Client
+	kvstoreClientConfig := clientCredentialsConfig
+	kvstoreClientConfig.Endpoint = tea.String(fmt.Sprintf("r-kvstore.%s.aliyuncs.com", region))
+	kvstoreClient, err := alicloudKvstoreClient.NewClient(kvstoreClientConfig)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create AliCloud R-Kvstore API Client",
@@ -500,7 +500,7 @@ func (p *alicloudProvider) Configure(ctx context.Context, req provider.Configure
 		essClient:         essClient,
 		servicemeshClient: servicemeshClient,
 		imsClient:         imsClient,
-		kvstoreRawClient:  kvstoreRawClient,
+		kvstoreClient:     kvstoreClient,
 		ecdClient:         ecdClient,
 		customEcdClient:   customEcdClient,
 		ververicaClient:   ververicaClient,

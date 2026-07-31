@@ -8,20 +8,18 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	alicloudOpenapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
+	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/v7/client"
 )
 
 var (
-	_ resource.Resource                = &kvstoreElasticBurstBandwidthResource{}
-	_ resource.ResourceWithConfigure   = &kvstoreElasticBurstBandwidthResource{}
-	_ resource.ResourceWithImportState = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.Resource              = &kvstoreElasticBurstBandwidthResource{}
+	_ resource.ResourceWithConfigure = &kvstoreElasticBurstBandwidthResource{}
 )
 
 func NewKvstoreElasticBurstBandwidthResource() resource.Resource {
@@ -29,7 +27,7 @@ func NewKvstoreElasticBurstBandwidthResource() resource.Resource {
 }
 
 type kvstoreElasticBurstBandwidthResource struct {
-	client *alicloudOpenapiClient.Client
+	client *alicloudKvstoreClient.Client
 }
 
 type kvstoreElasticBurstBandwidthModel struct {
@@ -75,7 +73,7 @@ func (r *kvstoreElasticBurstBandwidthResource) Configure(_ context.Context, req 
 	if req.ProviderData == nil {
 		return
 	}
-	r.client = req.ProviderData.(alicloudClients).kvstoreRawClient
+	r.client = req.ProviderData.(alicloudClients).kvstoreClient
 }
 
 // --- CRUD ---
@@ -125,14 +123,13 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 
 	instanceId := state.InstanceId.ValueString()
 
-	// Check instance still exists. DescribeInstances returns empty list if deleted.
-	_, err := kvstoreRawCall(r.client, "DescribeInstances", map[string]any{
-		"InstanceIds": tea.String(instanceId),
+	// Check instance still exists.
+	_, err := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+		InstanceIds: tea.String(instanceId),
 	})
 	if err != nil {
-		// Instance may be gone — remove from state.
-		if strings.Contains(strings.ToLower(err.Error()), "notfound") ||
-			strings.Contains(strings.ToLower(err.Error()), "invalidinstance") {
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "invalidinstance") {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -144,9 +141,6 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 	}
 
 	state.Id = types.StringValue(instanceId)
-	// Keep the plan/state value for burstable_bandwidth — do NOT override from API.
-	// The API read-back may be stale immediately after apply, causing diff loops.
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -195,7 +189,6 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 
 	instanceId := state.InstanceId.ValueString()
 
-	// Disable burst
 	if err := r.setBurst(instanceId, false); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to disable Redis elastic burst bandwidth.",
@@ -205,51 +198,26 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 	}
 }
 
-func (r *kvstoreElasticBurstBandwidthResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Format: instance_id
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("instance_id"), types.StringValue(req.ID))...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
-}
-
 // --- API helpers ---
 
 // setBurst toggles elastic burst bandwidth while preserving the existing
 // bandwidth configuration (instance-level or per-shard).
-//
-// Before any API call, we read DescribeRoleZoneInfo to classify the current
-// state into one of three scenarios:
-//
-//  1. No adjustment — all shards have current == default.
-//     → NodeId="All", Bandwidth="0"
-//  2. Instance-level adjustment — all shards have current != default,
-//     but all shards share the same current value.
-//     → NodeId="All", Bandwidth="current-default"
-//  3. Per-shard adjustment — shards have different current values.
-//     → NodeId="r-xxx-db-0,r-xxx-db-1,...", Bandwidth="bw0,bw1,..."
-//     where each bwN = currentN - defaultN for that shard.
-//
-// After determining the NodeId + Bandwidth pair, we call
-// EnableAdditionalBandwidth with the appropriate BandWidthBurst flag.
 func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst bool) error {
-	burstStr := "false"
-	if burst {
-		burstStr = "true"
-	}
-
 	nodeId, bandwidth, err := r.classifyAndBuildBwParams(instanceId)
 	if err != nil {
 		return fmt.Errorf("failed to classify bandwidth state for instance %s: %w", instanceId, err)
 	}
 
-	_, err = kvstoreRawCall(r.client, "EnableAdditionalBandwidth", map[string]any{
-		"InstanceId":     tea.String(instanceId),
-		"NodeId":         tea.String(nodeId),
-		"Bandwidth":      tea.String(bandwidth),
-		"BandWidthBurst": tea.String(burstStr),
-		"ChargeType":     tea.String("PostPaid"),
-		"AutoPay":        tea.String("true"),
-	})
-	if err != nil {
+	req := &alicloudKvstoreClient.EnableAdditionalBandwidthRequest{
+		InstanceId:     tea.String(instanceId),
+		NodeId:         tea.String(nodeId),
+		Bandwidth:      tea.String(bandwidth),
+		BandWidthBurst: tea.Bool(burst),
+		ChargeType:     tea.String("PostPaid"),
+		AutoPay:        tea.Bool(true),
+	}
+
+	if err := kvstoreEnableAdditionalBandwidth(r.client, req); err != nil {
 		return fmt.Errorf("failed to set elastic burst for instance %s (NodeId=%s, Bandwidth=%s): %w",
 			instanceId, nodeId, bandwidth, err)
 	}
@@ -263,21 +231,20 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 
 // classifyAndBuildBwParams reads DescribeRoleZoneInfo and determines the
 // correct NodeId and Bandwidth parameters to preserve the current bandwidth
-// state when toggling burst. See setBurst docs for the three scenarios.
+// state when toggling burst.
 func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
-	body, err := kvstoreRawCall(r.client, "DescribeRoleZoneInfo", map[string]any{
-		"InstanceId": tea.String(instanceId),
+	resp, err := r.client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+		InstanceId: tea.String(instanceId),
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("DescribeRoleZoneInfo failed: %w", err)
 	}
-
-	nodeContainer, ok := body["Node"].(map[string]any)
-	if !ok {
+	if resp == nil || resp.Body == nil || resp.Body.Node == nil {
 		return "", "", fmt.Errorf("no Node in DescribeRoleZoneInfo response")
 	}
-	nodes, ok := nodeContainer["NodeInfo"].([]any)
-	if !ok || len(nodes) == 0 {
+
+	nodes := resp.Body.Node.NodeInfo
+	if len(nodes) == 0 {
 		return "", "", fmt.Errorf("no NodeInfo in DescribeRoleZoneInfo response")
 	}
 
@@ -291,20 +258,26 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 		DefaultBw int64
 	}
 	var shards []shardBw
-	for _, n := range nodes {
-		node, ok := n.(map[string]any)
-		if !ok {
+	for _, node := range nodes {
+		if node.InsName == nil {
 			continue
 		}
-		insName, _ := node["InsName"].(string)
+		insName := *node.InsName
 		if insName == "" || seen[insName] {
 			continue
 		}
 		seen[insName] = true
+		var curBw, defBw int64
+		if node.CurrentBandWidth != nil {
+			curBw = *node.CurrentBandWidth
+		}
+		if node.DefaultBandWidth != nil {
+			defBw = *node.DefaultBandWidth
+		}
 		shards = append(shards, shardBw{
 			InsName:   insName,
-			CurrentBw: toInt64(node["CurrentBandWidth"]),
-			DefaultBw: toInt64(node["DefaultBandWidth"]),
+			CurrentBw: curBw,
+			DefaultBw: defBw,
 		})
 	}
 
@@ -324,8 +297,7 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 		return "All", "0", nil
 	}
 
-	// Scenario 2: all shards current != default AND all current values are the same.
-	// This is instance-level adjustment.
+	// Scenario 2: all shards share the same current and default values.
 	allSameCurrent := true
 	firstCurrent := shards[0].CurrentBw
 	firstDefault := shards[0].DefaultBw
@@ -344,7 +316,6 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 	}
 
 	// Scenario 3: per-shard adjustment — shards have different current values.
-	// Build comma-separated NodeId and Bandwidth lists.
 	var ids []string
 	var bws []string
 	for _, s := range shards {
