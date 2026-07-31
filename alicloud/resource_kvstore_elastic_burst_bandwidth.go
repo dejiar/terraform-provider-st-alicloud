@@ -324,12 +324,14 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 	}
 
 	// Scenario 3: per-shard adjustment — shards have different current values.
+	// Only include shards where current > default. Shards where current == default
+	// are omitted — no need to send them to the API.
 	var ids []string
 	var bws []string
 	for _, s := range shards {
 		additional := s.CurrentBw - s.DefaultBw
-		if additional < 0 {
-			additional = 0
+		if additional <= 0 {
+			continue
 		}
 		ids = append(ids, s.InsName)
 		bws = append(bws, strconv.FormatInt(additional, 10))
