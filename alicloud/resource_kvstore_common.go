@@ -2,6 +2,7 @@ package alicloud
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
@@ -38,6 +39,8 @@ func kvstoreRetry(fn func() error) error {
 // kvstoreWaitForInstanceNormal polls DescribeInstances until the instance
 // reaches Normal status or the timeout elapses. Redis bandwidth changes take
 // 1-2 minutes (instance goes through Changing → Normal).
+// Returns nil if the instance is deleted (empty result) — caller should treat
+// this as "nothing to do" rather than an error.
 func kvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instanceId string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	pollInterval := 10 * time.Second
@@ -51,16 +54,40 @@ func kvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 			resp = r
 			return e
 		})
+		if err != nil {
+			// Instance deleted — nothing to wait for.
+			errStr := strings.ToLower(err.Error())
+			if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "invalidinstance") {
+				return nil
+			}
+		}
 		if err == nil && resp != nil && resp.Body != nil && resp.Body.Instances != nil {
-			if kvInsts := resp.Body.Instances.KVStoreInstance; len(kvInsts) > 0 {
-				if kvInsts[0].InstanceStatus != nil && *kvInsts[0].InstanceStatus == "Normal" {
-					return nil
-				}
+			kvInsts := resp.Body.Instances.KVStoreInstance
+			if len(kvInsts) == 0 {
+				// Instance deleted — not in the list.
+				return nil
+			}
+			if kvInsts[0].InstanceStatus != nil && *kvInsts[0].InstanceStatus == "Normal" {
+				return nil
 			}
 		}
 		time.Sleep(pollInterval)
 	}
 	return fmt.Errorf("timed out waiting for instance %s to reach Normal status", instanceId)
+}
+
+// kvstoreInstanceExists checks if a Redis instance still exists.
+func kvstoreInstanceExists(client *alicloudKvstoreClient.Client, instanceId string) bool {
+	resp, err := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+		InstanceIds: tea.String(instanceId),
+	})
+	if err != nil {
+		return false
+	}
+	if resp == nil || resp.Body == nil || resp.Body.Instances == nil {
+		return false
+	}
+	return len(resp.Body.Instances.KVStoreInstance) > 0
 }
 
 // kvstoreReadBurstValue reads IntranetBandWidthBurst from DescribeIntranetAttribute.

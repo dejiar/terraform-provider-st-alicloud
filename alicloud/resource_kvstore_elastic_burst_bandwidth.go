@@ -192,6 +192,11 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 
 	instanceId := state.InstanceId.ValueString()
 
+	// If the Redis instance itself is gone, nothing to disable.
+	if !kvstoreInstanceExists(r.client, instanceId) {
+		return
+	}
+
 	if err := r.setBurst(instanceId, false); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to disable Redis elastic burst bandwidth.",

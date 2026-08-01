@@ -285,6 +285,11 @@ func (r *kvstoreIndividualShardBandwidthResource) Delete(ctx context.Context, re
 	instanceId := state.InstanceId.ValueString()
 	shardId := state.ShardId.ValueString()
 
+	// If the Redis instance itself is gone, nothing to reset.
+	if !kvstoreInstanceExists(r.client, instanceId) {
+		return
+	}
+
 	// Reset shard bandwidth to 0 (default).
 	if err := r.setBandwidth(instanceId, shardId, 0); err != nil {
 		resp.Diagnostics.AddError(
