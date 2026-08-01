@@ -340,16 +340,33 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 }
 
 // verifyBurst reads back IntranetBandWidthBurst and confirms the burst state matches.
+// Retries up to 2 minutes because the burst attribute may lag behind instance
+// status — the instance shows "Normal" before IntranetBandWidthBurst propagates.
 func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, burst bool) error {
-	burstBw, err := kvstoreReadBurstValue(r.client, instanceId)
-	if err != nil {
-		return fmt.Errorf("failed to read burst status for verification: %w", err)
+	deadline := time.Now().Add(2 * time.Minute)
+	pollInterval := 10 * time.Second
+
+	for time.Now().Before(deadline) {
+		burstBw, err := kvstoreReadBurstValue(r.client, instanceId)
+		if err != nil {
+			return fmt.Errorf("failed to read burst status for verification: %w", err)
+		}
+		if burst && burstBw > 0 {
+			return nil
+		}
+		if !burst && burstBw <= 0 {
+			return nil
+		}
+		time.Sleep(pollInterval)
 	}
+
+	// Final read for error message
+	burstBw, _ := kvstoreReadBurstValue(r.client, instanceId)
 	if burst && burstBw <= 0 {
-		return fmt.Errorf("burstable_bandwidth=true but instance %s burst is not enabled (IntranetBandWidthBurst=0)", instanceId)
+		return fmt.Errorf("burstable_bandwidth=true but instance %s burst is not enabled (IntranetBandWidthBurst=0) after 2 minutes", instanceId)
 	}
 	if !burst && burstBw > 0 {
-		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d)", instanceId, burstBw)
+		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d) after 2 minutes", instanceId, burstBw)
 	}
 	return nil
 }
