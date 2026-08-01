@@ -206,6 +206,13 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 // setBurst toggles elastic burst bandwidth while preserving the existing
 // bandwidth configuration (instance-level or per-shard).
 func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst bool) error {
+	// Wait for any in-flight task to finish before making changes.
+	// AliCloud Redis returns "current instance has unfinish task" if the
+	// instance is still in "Changing" status from a previous operation.
+	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 10*time.Minute); waitErr != nil {
+		return fmt.Errorf("instance %s not in Normal state before setBurst: %w", instanceId, waitErr)
+	}
+
 	nodeId, bandwidth, err := r.classifyAndBuildBwParams(instanceId)
 	if err != nil {
 		return fmt.Errorf("failed to classify bandwidth state for instance %s: %w", instanceId, err)

@@ -305,6 +305,13 @@ func makeShardId(instanceId, shardId string) string {
 // setBandwidth calls EnableAdditionalBandwidth with the given shard ID and bandwidth.
 // bandwidth=0 resets the shard to default (used by Delete).
 func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shardId string, bandwidth int64) error {
+	// Wait for any in-flight task to finish before making changes.
+	// AliCloud Redis returns "current instance has unfinish task" if the
+	// instance is still in "Changing" status from a previous operation.
+	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 10*time.Minute); waitErr != nil {
+		return fmt.Errorf("instance %s not in Normal state before setBandwidth: %w", instanceId, waitErr)
+	}
+
 	req := &alicloudKvstoreClient.EnableAdditionalBandwidthRequest{
 		InstanceId:  tea.String(instanceId),
 		NodeId:      tea.String(shardId),
