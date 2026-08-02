@@ -16,6 +16,7 @@ const (
 	ERR_BACKEND_TIMEOUT              = "d504to"
 	ERR_INSTANCE_STATUS_NOT_SUPPORT  = "instancestatus.notsupport"
 	ERR_SYSTEM_CONCURRENT_OPERATE    = "system.concurrent_operate"
+	ERR_TASK_CONFLICT                = "task.conflict"
 )
 
 func isAbleToRetry(errCode string) bool {
@@ -31,7 +32,8 @@ func isAbleToRetry(errCode string) bool {
 		ERR_UNKNOWN_ERROR,
 		ERR_INTERNAL_ERROR,
 		ERR_INSTANCE_STATUS_NOT_SUPPORT,
-		ERR_SYSTEM_CONCURRENT_OPERATE:
+		ERR_SYSTEM_CONCURRENT_OPERATE,
+		ERR_TASK_CONFLICT:
 		return true
 	default:
 		return false
