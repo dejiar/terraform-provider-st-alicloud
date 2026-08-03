@@ -6,36 +6,18 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/cenkalti/backoff/v4"
 
 	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/v7/client"
 
 	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 )
 
+// kvstoreRetryTimeout is the max elapsed time for kvstore API retries.
+const kvstoreRetryTimeout = 5 * time.Minute
+
 // kvstoreRetry wraps a function with exponential backoff retry logic.
-// Non-retryable errors are made permanent via backoff.Permanent.
 func kvstoreRetry(fn func() error) error {
-	bo := backoff.NewExponentialBackOff()
-	bo.MaxElapsedTime = 5 * time.Minute
-	return backoff.Retry(func() error {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			code := ""
-			if t.Code != nil {
-				code = *t.Code
-			}
-			if !utils.IsAbleToRetry(code) {
-				return backoff.Permanent(err)
-			}
-			return err // retryable
-		}
-		// Non-SDK error — don't retry.
-		return backoff.Permanent(err)
-	}, bo)
+	return utils.RetryWithBackoff(fn, kvstoreRetryTimeout)
 }
 
 // kvstoreWaitForInstanceNormal polls DescribeInstances until the instance
