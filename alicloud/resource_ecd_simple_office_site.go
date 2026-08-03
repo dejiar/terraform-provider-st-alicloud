@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"strings"
@@ -30,7 +31,7 @@ func NewAliecdSimpleOfficeSiteResource() resource.Resource {
 }
 
 type ecdSimpleOfficeSiteResource struct {
-	client *EcdClient
+	client *utils.EcdClient
 }
 
 type ECDBasicOfficeSiteModel struct {
@@ -198,7 +199,7 @@ func (r *ecdSimpleOfficeSiteResource) Create(ctx context.Context, req resource.C
 			)
 			return
 		}
-		if existingId, found := ExtractOfficeSiteIdByVpc(existingResp, vpcId); found {
+		if existingId, found := utils.ExtractOfficeSiteIdByVpc(existingResp, vpcId); found {
 			resp.Diagnostics.AddError(
 				"[API ERROR] Simple Office Site Already Exists.",
 				fmt.Sprintf("VPC %s already has a simple office site. Only 1 per VPC is allowed. Existing ID: %s", vpcId, existingId),

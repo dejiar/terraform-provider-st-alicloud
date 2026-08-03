@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -29,7 +30,7 @@ type csUserKubeconfigDataSource struct {
 }
 
 type csUserKubeconfigDataSourceModel struct {
-	ClientConfig *clientConfig `tfsdk:"client_config"`
+	ClientConfig *utils.ClientConfig `tfsdk:"client_config"`
 	ClusterId    types.String  `tfsdk:"cluster_id"`
 	Kubeconfig   types.String  `tfsdk:"kubeconfig"`
 }
@@ -97,10 +98,10 @@ func (d *csUserKubeconfigDataSource) Read(ctx context.Context, req datasource.Re
 	}
 
 	if plan.ClientConfig == nil {
-		plan.ClientConfig = &clientConfig{}
+		plan.ClientConfig = &utils.ClientConfig{}
 	}
 
-	initClient, clientCredentialsConfig, initClientDiags := initNewClient(&d.client.Client, plan.ClientConfig)
+	initClient, clientCredentialsConfig, initClientDiags := utils.InitNewClient(&d.client.Client, plan.ClientConfig)
 	if initClientDiags.HasError() {
 		resp.Diagnostics.Append(initClientDiags...)
 		return
@@ -141,7 +142,7 @@ func (d *csUserKubeconfigDataSource) Read(ctx context.Context, req datasource.Re
 		userKubeconfig, err = d.client.DescribeClusterUserKubeconfigWithOptions(tea.String(plan.ClusterId.ValueString()), describeClusterUserKubeconfigRequest, headers, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

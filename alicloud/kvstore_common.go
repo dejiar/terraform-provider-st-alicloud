@@ -9,6 +9,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/v7/client"
+
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 )
 
 // kvstoreRetry wraps a function with exponential backoff retry logic.
@@ -26,7 +28,7 @@ func kvstoreRetry(fn func() error) error {
 			if t.Code != nil {
 				code = *t.Code
 			}
-			if !isAbleToRetry(code) {
+			if !utils.IsAbleToRetry(code) {
 				return backoff.Permanent(err)
 			}
 			return err // retryable

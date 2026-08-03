@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -904,7 +905,7 @@ func (r *ramPolicyResource) attachPolicyToUser(state *ramPolicyResourceModel) (e
 
 func handleAPIError(err error) error {
 	if _t, ok := err.(*tea.SDKError); ok {
-		if isAbleToRetry(*_t.Code) {
+		if utils.IsAbleToRetry(*_t.Code) {
 			return err
 		} else {
 			return backoff.Permanent(err)

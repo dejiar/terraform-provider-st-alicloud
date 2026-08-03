@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"errors"
 	"strings"
@@ -249,7 +250,7 @@ func (r *aliadbResourceGroupBindResource) bindGroupUser(plan *aliadbResourceGrou
 		_, err := r.client.BindDBResourceGroupWithUserWithOptions(bindDBResourceGroupWithUserRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -285,7 +286,7 @@ func (r *aliadbResourceGroupBindResource) unbindGroupUser(plan *aliadbResourceGr
 		_, err := r.client.UnbindDBResourceGroupWithUserWithOptions(unbindDBResourceGroupWithUserRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

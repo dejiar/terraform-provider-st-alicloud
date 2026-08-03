@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"regexp"
 	"time"
@@ -190,7 +191,7 @@ func (d *ddoscooInstancesDataSource) Read(ctx context.Context, req datasource.Re
 			// Plan ID List to List of String
 			var planIdsList []string
 			for _, x := range plan.IDs.Elements() {
-				planIdsList = append(planIdsList, trimStringQuotes(x.String()))
+				planIdsList = append(planIdsList, utils.TrimStringQuotes(x.String()))
 			}
 
 			describeInstancesRequest.InstanceIds = tea.StringSlice(planIdsList)
@@ -213,7 +214,7 @@ func (d *ddoscooInstancesDataSource) Read(ctx context.Context, req datasource.Re
 		antiddosInstances, err := d.client.DescribeInstancesWithOptions(describeInstancesRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -239,7 +240,7 @@ func (d *ddoscooInstancesDataSource) Read(ctx context.Context, req datasource.Re
 			antiddosInstanceSpecs, err := d.client.DescribeInstanceSpecsWithOptions(describeInstanceSpecsRequest, runtime)
 			if err != nil {
 				if _t, ok := err.(*tea.SDKError); ok {
-					if isAbleToRetry(*_t.Code) {
+					if utils.IsAbleToRetry(*_t.Code) {
 						return err
 					} else {
 						return backoff.Permanent(err)
@@ -254,7 +255,7 @@ func (d *ddoscooInstancesDataSource) Read(ctx context.Context, req datasource.Re
 			antiddosInstanceDetails, err := d.client.DescribeInstanceDetailsWithOptions(describeInstanceDetailsRequest, runtime)
 			if err != nil {
 				if _t, ok := err.(*tea.SDKError); ok {
-					if isAbleToRetry(*_t.Code) {
+					if utils.IsAbleToRetry(*_t.Code) {
 						return err
 					} else {
 						return backoff.Permanent(err)

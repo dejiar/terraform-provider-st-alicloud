@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"strconv"
 	"time"
@@ -172,7 +173,7 @@ func (r *cmsAlarmRuleResource) Read(ctx context.Context, req resource.ReadReques
 		alarmRuleResponse, err := r.client.DescribeMetricRuleListWithOptions(describeMetricRuleListRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -296,7 +297,7 @@ func (r *cmsAlarmRuleResource) Delete(ctx context.Context, req resource.DeleteRe
 		_, err := r.client.DeleteMetricRulesWithOptions(deleteMetricRulesRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -351,7 +352,7 @@ func (r *cmsAlarmRuleResource) setRule(ctx context.Context, plan *cmsAlarmRuleRe
 		_, _err := r.client.CreateGroupMetricRulesWithOptions(createGroupMetricRulesRequest, runtime)
 		if _err != nil {
 			if _t, ok := _err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return _err
 				} else {
 					return backoff.Permanent(_err)
@@ -378,7 +379,7 @@ func (r *cmsAlarmRuleResource) setRule(ctx context.Context, plan *cmsAlarmRuleRe
 		_, err := r.client.PutResourceMetricRuleWithOptions(putResourceMetricRuleRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

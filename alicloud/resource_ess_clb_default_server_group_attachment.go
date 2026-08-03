@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"time"
@@ -166,17 +167,17 @@ func (r *essClbDefaultServerGroupAttachmentResource) Update(ctx context.Context,
 		planLbs := make(map[string]struct{})
 
 		for _, lb := range loadBalancerIds {
-			stateLbs[trimStringQuotes(lb.String())] = struct{}{}
+			stateLbs[utils.TrimStringQuotes(lb.String())] = struct{}{}
 		}
 		for _, lb := range plan.LoadBalancerIds.Elements() {
-			planLbs[trimStringQuotes(lb.String())] = struct{}{}
+			planLbs[utils.TrimStringQuotes(lb.String())] = struct{}{}
 		}
 
 		// Detach load balancer when load balancer from State does not exist in Plan.
 		var detachLbs []attr.Value
 		for _, lb := range loadBalancerIds {
-			if _, exists := planLbs[trimStringQuotes(lb.String())]; !exists {
-				detachLbs = append(detachLbs, types.StringValue(trimStringQuotes(lb.String())))
+			if _, exists := planLbs[utils.TrimStringQuotes(lb.String())]; !exists {
+				detachLbs = append(detachLbs, types.StringValue(utils.TrimStringQuotes(lb.String())))
 			}
 		}
 		if len(detachLbs) > 0 {
@@ -194,8 +195,8 @@ func (r *essClbDefaultServerGroupAttachmentResource) Update(ctx context.Context,
 		// Attach load balancer when load balancer from Plan does not exist in State.
 		var attachLbs []attr.Value
 		for _, lb := range plan.LoadBalancerIds.Elements() {
-			if _, exists := stateLbs[trimStringQuotes(lb.String())]; !exists {
-				attachLbs = append(attachLbs, types.StringValue(trimStringQuotes(lb.String())))
+			if _, exists := stateLbs[utils.TrimStringQuotes(lb.String())]; !exists {
+				attachLbs = append(attachLbs, types.StringValue(utils.TrimStringQuotes(lb.String())))
 			}
 		}
 		if len(attachLbs) > 0 {
@@ -284,7 +285,7 @@ func (r *essClbDefaultServerGroupAttachmentResource) getLoadBalancersFromScaling
 		describeScalingGroupsResponse, err = r.client.DescribeScalingGroupsWithOptions(describeScalingGroupsRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -322,7 +323,7 @@ func (r *essClbDefaultServerGroupAttachmentResource) attachLoadBalancers(model *
 
 		for _, id := range model.LoadBalancerIds.Elements() {
 			fmt.Print(id)
-			loadBalancersIds = append(loadBalancersIds, tea.String(trimStringQuotes(id.String())))
+			loadBalancersIds = append(loadBalancersIds, tea.String(utils.TrimStringQuotes(id.String())))
 		}
 
 		attachLoadBalancersRequest := &alicloudEssClient.AttachLoadBalancersRequest{
@@ -334,7 +335,7 @@ func (r *essClbDefaultServerGroupAttachmentResource) attachLoadBalancers(model *
 		_, _err := r.client.AttachLoadBalancersWithOptions(attachLoadBalancersRequest, runtime)
 		if _err != nil {
 			if _t, ok := _err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return _err
 				} else {
 					return backoff.Permanent(_err)
@@ -363,7 +364,7 @@ func (r *essClbDefaultServerGroupAttachmentResource) detachLoadBalancers(model *
 		var loadBalancersIds []*string
 
 		for _, id := range model.LoadBalancerIds.Elements() {
-			loadBalancersIds = append(loadBalancersIds, tea.String(trimStringQuotes(id.String())))
+			loadBalancersIds = append(loadBalancersIds, tea.String(utils.TrimStringQuotes(id.String())))
 		}
 
 		detachLoadBalancersRequest := &alicloudEssClient.DetachLoadBalancersRequest{
@@ -375,7 +376,7 @@ func (r *essClbDefaultServerGroupAttachmentResource) detachLoadBalancers(model *
 		_, _err := r.client.DetachLoadBalancersWithOptions(detachLoadBalancersRequest, runtime)
 		if _err != nil {
 			if _t, ok := _err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return _err
 				} else {
 					return backoff.Permanent(_err)

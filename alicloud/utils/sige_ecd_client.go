@@ -11,7 +11,7 @@
 // over request parameters without forking the SDK. Once AliCloud publicly
 // releases these parameters in the SDK, this file can be replaced by the
 // corresponding official client calls.
-package alicloud
+package utils
 
 import (
 	"fmt"

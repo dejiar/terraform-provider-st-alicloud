@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 	"fmt"
@@ -146,7 +147,7 @@ func (r *ddoscooWebAIProtectConfigResource) Read(ctx context.Context, req resour
 		webCcProtectSwitch, err := r.client.DescribeWebCcProtectSwitchWithOptions(describeWebCcProtectSwitchRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -286,7 +287,7 @@ func (r *ddoscooWebAIProtectConfigResource) modifyAIProtectMode(plan *ddoscooWeb
 		_, _err := r.client.ModifyWebAIProtectSwitchWithOptions(modifyWebAIProtectSwitchRequest, runtime)
 		if _err != nil {
 			if _t, ok := _err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return _err
 				} else {
 					return backoff.Permanent(_err)
@@ -328,7 +329,7 @@ func (r *ddoscooWebAIProtectConfigResource) modifyAIProtectMode(plan *ddoscooWeb
 			_, _err := r.client.ModifyWebAIProtectModeWithOptions(modifyWebAIProtectModeRequest, runtime)
 			if _err != nil {
 				if _t, ok := _err.(*tea.SDKError); ok {
-					if isAbleToRetry(*_t.Code) {
+					if utils.IsAbleToRetry(*_t.Code) {
 						return _err
 					} else {
 						return backoff.Permanent(_err)

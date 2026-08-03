@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -220,7 +221,7 @@ func (r *emrMetricAutoScalingRulesResource) Read(ctx context.Context, req resour
 		autoScalingPolicy, err = r.client.GetAutoScalingPolicyWithOptions(getAutoScalingPolicyRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -337,7 +338,7 @@ func (r *emrMetricAutoScalingRulesResource) Delete(ctx context.Context, req reso
 		_, err := r.client.RemoveAutoScalingPolicyWithOptions(removeAutoScalingPolicyRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -416,7 +417,7 @@ func (r *emrMetricAutoScalingRulesResource) putRule(plan *emrMetricAutoScalingRu
 		_, err := r.client.PutAutoScalingPolicyWithOptions(putAutoScalingPolicyRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

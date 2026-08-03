@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"time"
@@ -101,7 +102,7 @@ func (r *userSSOSettingsResource) Read(ctx context.Context, req resource.ReadReq
 		getUserSsoSettings, err := r.client.GetUserSsoSettings()
 		if err != nil {
 			if sdkErr, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*sdkErr.Code) {
+				if utils.IsAbleToRetry(*sdkErr.Code) {
 					return err
 				}
 				return backoff.Permanent(err)
@@ -207,7 +208,7 @@ func (r *userSSOSettingsResource) setUserSsoSettings(plan *userSSOSettingsResour
 
 		if _, err := r.client.SetUserSsoSettingsWithOptions(setUserSsoSettingsRequest, runtime); err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

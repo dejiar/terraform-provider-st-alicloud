@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"strings"
@@ -224,7 +225,7 @@ func (r *slbListenerAclAttachmentResource) readListenerAcl(listenerId string) (s
 				ListenerProtocol: tea.String(protocol),
 			}, &util.RuntimeOptions{})
 		if apiErr != nil {
-			if _t, ok := apiErr.(*tea.SDKError); ok && isAbleToRetry(*_t.Code) {
+			if _t, ok := apiErr.(*tea.SDKError); ok && utils.IsAbleToRetry(*_t.Code) {
 				return apiErr
 			}
 			return backoff.Permanent(apiErr)
@@ -358,7 +359,7 @@ func isRetryableOrStatusError(err error) bool {
 		if code == "operationfailed.listenerstatusnotsupport" {
 			return true
 		}
-		return isAbleToRetry(*sdkErr.Code)
+		return utils.IsAbleToRetry(*sdkErr.Code)
 	}
 	return false
 }

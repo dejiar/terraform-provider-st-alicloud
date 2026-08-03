@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -125,7 +126,7 @@ func (r *alidnsDomainAttachmentResource) Read(ctx context.Context, req resource.
 		dnsResp, err = r.client.DescribeDomainInfoWithOptions(describeDomainInfoWithDomainRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -239,7 +240,7 @@ func (r *alidnsDomainAttachmentResource) createBindInstance(plan *alidnsDomainAt
 
 		if _, err := r.client.BindInstanceDomainsWithOptions(bindInstanceDomainsWithIdRequest, runtime); err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -277,7 +278,7 @@ func (r *alidnsDomainAttachmentResource) removeBindInstance(state *alidnsDomainA
 
 		if _, err := r.client.UnbindInstanceDomainsWithOptions(unbindInstanceDomainsRequest, runtime); err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

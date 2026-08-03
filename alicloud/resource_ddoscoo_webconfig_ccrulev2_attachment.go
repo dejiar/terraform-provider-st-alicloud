@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -708,7 +709,7 @@ func (r *ddoscooWebconfigCCRuleV2Resource) createCCRuleV2(rule *ddoscooWebconfig
 	_, _err := r.client.ConfigWebCCRuleV2WithOptions(ccRuleV2CreateReq, runtime)
 	if _err != nil {
 		if _t, ok := _err.(*tea.SDKError); ok {
-			if isAbleToRetry(*_t.Code) {
+			if utils.IsAbleToRetry(*_t.Code) {
 				return _err
 			} else {
 				return backoff.Permanent(_err)
@@ -830,7 +831,7 @@ func (r *ddoscooWebconfigCCRuleV2Resource) deleteCCRuleV2(rule *ddoscooWebconfig
 	_, _err := r.client.DeleteWebCCRuleV2WithOptions(ccRuleV2DeleteReq, runtime)
 	if _err != nil {
 		if _t, ok := _err.(*tea.SDKError); ok {
-			if isAbleToRetry(*_t.Code) {
+			if utils.IsAbleToRetry(*_t.Code) {
 				return _err
 			} else {
 				return backoff.Permanent(_err)

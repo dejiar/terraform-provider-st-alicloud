@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -109,7 +110,7 @@ func (r *cmsSystemEventContactGroupAttachmentResource) Read(ctx context.Context,
 		readSystemEventGroupResponse, err := r.client.DescribeEventRuleTargetListWithOptions(readSystemEventGroupRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -200,7 +201,7 @@ func (r *cmsSystemEventContactGroupAttachmentResource) bindSystemEventGroup(plan
 
 		if _, err := r.client.PutEventRuleTargetsWithOptions(bindSystemEventGroupRequest, runtime); err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

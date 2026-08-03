@@ -1,4 +1,4 @@
-package alicloud
+package utils
 
 import "strings"
 
@@ -19,7 +19,7 @@ const (
 	ERR_TASK_CONFLICT                = "task.conflict"
 )
 
-func isAbleToRetry(errCode string) bool {
+func IsAbleToRetry(errCode string) bool {
 	switch strings.ToLower(errCode) {
 	case ERR_CLOSE_DNS_SLB_FAILED,
 		ERR_DISABLE_DNS_SLB,

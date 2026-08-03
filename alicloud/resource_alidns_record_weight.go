@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"time"
@@ -133,7 +134,7 @@ func (r *aliDnsRecordWeightResource) Read(ctx context.Context, req resource.Read
 		responseById, err := r.client.DescribeDomainRecordInfoWithOptions(DescDomainRecordWithIdRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					if *_t.Code == "InvalidRR.NoExist" {
@@ -159,7 +160,7 @@ func (r *aliDnsRecordWeightResource) Read(ctx context.Context, req resource.Read
 		responseBySubRecords, err := r.client.DescribeSubDomainRecordsWithOptions(DescSubDomainRecords, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -178,7 +179,7 @@ func (r *aliDnsRecordWeightResource) Read(ctx context.Context, req resource.Read
 		responseBySLBStatus, err := r.client.DescribeDNSSLBSubDomainsWithOptions(DescDNSSLBSubDomains, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -313,7 +314,7 @@ func (r *aliDnsRecordWeightResource) setWeight(plan *aliDnsRecordWeightResourceM
 		responseById, err := r.client.DescribeDomainRecordInfoWithOptions(DescDomainRecordWithIdRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -331,7 +332,7 @@ func (r *aliDnsRecordWeightResource) setWeight(plan *aliDnsRecordWeightResourceM
 		responseByName, err := r.client.DescribeDNSSLBSubDomainsWithOptions(DescDnsSlbSubDomainRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -356,7 +357,7 @@ func (r *aliDnsRecordWeightResource) setWeight(plan *aliDnsRecordWeightResourceM
 				_, err = r.client.SetDNSSLBStatusWithOptions(setDNSSLBStatusRequest, runtime)
 				if err != nil {
 					if _t, ok := err.(*tea.SDKError); ok {
-						if isAbleToRetry(*_t.Code) {
+						if utils.IsAbleToRetry(*_t.Code) {
 							return err
 						} else {
 							return backoff.Permanent(err)
@@ -377,7 +378,7 @@ func (r *aliDnsRecordWeightResource) setWeight(plan *aliDnsRecordWeightResourceM
 		_, err = r.client.UpdateDNSSLBWeightWithOptions(updateDNSSLBWeightRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

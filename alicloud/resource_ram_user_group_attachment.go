@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -104,7 +105,7 @@ func (r *ramUserGroupAttachmentResource) Read(ctx context.Context, req resource.
 		listUserForGroupResponse, err := r.client.ListUsersForGroupWithOptions(listUserForGroupRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -203,7 +204,7 @@ func (r *ramUserGroupAttachmentResource) addUserToGroup(plan *ramUserGroupAttach
 
 		if _, err := r.client.AddUserToGroupWithOptions(addUserToGroupRequest, runtime); err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

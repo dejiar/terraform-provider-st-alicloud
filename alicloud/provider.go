@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"os"
@@ -42,7 +43,7 @@ type alicloudClients struct {
 	antiddosClient    *alicloudAntiddosClient.Client
 	slbClient         *alicloudSlbClient.Client
 	dnsClient         *alicloudDnsClient.Client
-	customEcdClient   *EcdClient
+	customEcdClient   *utils.EcdClient
 	ecdClient         *alicloudEcdClient.Client
 	ramClient         *alicloudRamClient.Client
 	cmsClient         *alicloudCmsClient.Client
@@ -448,7 +449,7 @@ func (p *alicloudProvider) Configure(ctx context.Context, req provider.Configure
 	}
 
 	// AliCloud ECD Custom RPC Client (used by simple office site resource)
-	customEcdClient := NewEcdClient(
+	customEcdClient := utils.NewEcdClient(
 		region,
 		accessKey,
 		secretKey,

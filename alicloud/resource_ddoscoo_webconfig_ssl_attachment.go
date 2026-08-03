@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"strconv"
 	"strings"
@@ -149,7 +150,7 @@ func (r *ddoscooWebconfigSslAttachmentResource) Read(ctx context.Context, req re
 		webRulesResponse, err := r.client.DescribeWebRulesWithOptions(describeWebRulesRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -273,7 +274,7 @@ func (r *ddoscooWebconfigSslAttachmentResource) bindCert(plan *ddoscooWebconfigS
 		_, _err := r.client.AssociateWebCertWithOptions(associateWebCertRequest, runtime)
 		if _err != nil {
 			if _t, ok := _err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return _err
 				} else {
 					return backoff.Permanent(_err)
@@ -297,7 +298,7 @@ func (r *ddoscooWebconfigSslAttachmentResource) bindCert(plan *ddoscooWebconfigS
 		_, _err := r.client.ModifyTlsConfigWithOptions(modifyTlsConfigRequest, runtime)
 		if _err != nil {
 			if _t, ok := _err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return _err
 				} else {
 					return backoff.Permanent(_err)

@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"encoding/json"
 	"strings"
@@ -28,7 +29,7 @@ type slbLoadBalancersDataSource struct {
 }
 
 type slbLoadBalancersDataSourceModel struct {
-	ClientConfig  *clientConfigWithZone     `tfsdk:"client_config"`
+	ClientConfig  *utils.ClientConfigWithZone     `tfsdk:"client_config"`
 	Name          types.String              `tfsdk:"name"`
 	Tags          types.Map                 `tfsdk:"tags"`
 	LoadBalancers []*slbLoadBalancersDetail `tfsdk:"load_balancers"`
@@ -136,10 +137,10 @@ func (d *slbLoadBalancersDataSource) Read(ctx context.Context, req datasource.Re
 	}
 
 	if plan.ClientConfig == nil {
-		plan.ClientConfig = &clientConfigWithZone{}
+		plan.ClientConfig = &utils.ClientConfigWithZone{}
 	}
 
-	initClient, clientCredentialsConfig, initClientDiags := initNewClient(&d.client.Client, plan.ClientConfig.getClientConfig())
+	initClient, clientCredentialsConfig, initClientDiags := utils.InitNewClient(&d.client.Client, plan.ClientConfig.GetClientConfig())
 	if initClientDiags.HasError() {
 		resp.Diagnostics.Append(initClientDiags...)
 		return

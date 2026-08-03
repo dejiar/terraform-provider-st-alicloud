@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -29,7 +30,7 @@ type cdnDomainDataSource struct {
 }
 
 type cdnDomainDataSourceModel struct {
-	ClientConfig *clientConfig `tfsdk:"client_config"`
+	ClientConfig *utils.ClientConfig `tfsdk:"client_config"`
 	DomainName   types.String  `tfsdk:"domain_name"`
 	DomainCName  types.String  `tfsdk:"domain_cname"`
 	Origins      types.List    `tfsdk:"origins"`
@@ -102,10 +103,10 @@ func (d *cdnDomainDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 
 	if plan.ClientConfig == nil {
-		plan.ClientConfig = &clientConfig{}
+		plan.ClientConfig = &utils.ClientConfig{}
 	}
 
-	initClient, clientCredentialsConfig, initClientDiags := initNewClient(&d.client.Client, plan.ClientConfig)
+	initClient, clientCredentialsConfig, initClientDiags := utils.InitNewClient(&d.client.Client, plan.ClientConfig)
 	if initClientDiags.HasError() {
 		resp.Diagnostics.Append(initClientDiags...)
 		return
@@ -148,7 +149,7 @@ func (d *cdnDomainDataSource) Read(ctx context.Context, req datasource.ReadReque
 		cdnDomains, err = d.client.DescribeCdnDomainDetailWithOptions(describeCdnDomainDetailRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else if *_t.Code == *tea.String("InvalidDomain.NotFound") {
 					return nil

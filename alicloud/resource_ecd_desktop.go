@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"errors"
 	"strings"
@@ -521,7 +522,7 @@ func (r *ecdDesktopResource) createDesktop(ctx context.Context, plan *ecdDesktop
 		createResp, err := r.client.CreateDesktopsWithOptions(createDesktopRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -558,7 +559,7 @@ func (r *ecdDesktopResource) describeDesktopById(id string) (*alicloudEcdClient.
 				return nil
 			}
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -590,7 +591,7 @@ func (r *ecdDesktopResource) modifyDesktopName(id, name string) error {
 		}, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -616,7 +617,7 @@ func (r *ecdDesktopResource) modifyDesktopPolicyGroup(id, policyGroupId string) 
 		}, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -644,7 +645,7 @@ func (r *ecdDesktopResource) deleteDesktop(id string) error {
 				return nil
 			}
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -755,7 +756,7 @@ func (r *ecdDesktopResource) tagResources(id string, tags []*alicloudEcdClient.T
 		}, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -782,7 +783,7 @@ func (r *ecdDesktopResource) untagResources(id string, tagKeys []*string) error 
 		}, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

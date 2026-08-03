@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"reflect"
 	"strings"
@@ -314,7 +315,7 @@ func (r *csKubernetesPermissionsResource) describeUserPermission(uid string) ([]
 		describeUserPermissionResponse, err = r.client.DescribeUserPermissionWithOptions(tea.String(uid), headers, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -394,7 +395,7 @@ func (r *csKubernetesPermissionsResource) grantPermissions(uid string, request [
 		_, err = r.client.GrantPermissionsWithOptions(tea.String(uid), grantPermissionsRequest, headers, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

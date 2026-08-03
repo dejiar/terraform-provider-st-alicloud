@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"reflect"
 
@@ -349,7 +350,7 @@ func (r *servicemeshUserPermissionResource) describeUserPermissions(uid string) 
 		describeUserPermissionsResponse, err = r.client.DescribeUserPermissionsWithOptions(describeUserPermissionsRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -411,7 +412,7 @@ func (r *servicemeshUserPermissionResource) grantPermissions(uid string, permStr
 		_, err = r.client.GrantUserPermissionsWithOptions(grantUserPermissionsRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

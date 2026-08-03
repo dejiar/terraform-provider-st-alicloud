@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"time"
@@ -374,7 +375,7 @@ func (r *alidnsGtmInstanceResource) Create(ctx context.Context, req resource.Cre
 		createInstanceResponse, err = r.baseClient.CreateInstanceWithOptions(createInstanceRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -652,7 +653,7 @@ func (r *alidnsGtmInstanceResource) readGtmInstance(state *alidnsGtmInstanceReso
 		describeDnsGtmInstanceResponse, err = r.client.DescribeDnsGtmInstanceWithOptions(describeGtmInstanceRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -695,7 +696,7 @@ func (r *alidnsGtmInstanceResource) readGtmInstance(state *alidnsGtmInstanceReso
 		queryAvailableInstancesResponse, err = r.baseClient.QueryAvailableInstancesWithOptions(queryAvailableInstancesRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -765,7 +766,7 @@ func (r *alidnsGtmInstanceResource) readGtmInstance(state *alidnsGtmInstanceReso
 		state.Ttl = types.Int64Value(int64(*describeDnsGtmInstanceResponse.Body.Config.Ttl))
 	}
 	if describeDnsGtmInstanceResponse.Body.Config.AlertGroup != nil {
-		alertGroupList, err := convertJsonStringToListString(*describeDnsGtmInstanceResponse.Body.Config.AlertGroup)
+		alertGroupList, err := utils.ConvertJsonStringToListString(*describeDnsGtmInstanceResponse.Body.Config.AlertGroup)
 		if err != nil {
 			return diag.Diagnostics{
 				diag.NewErrorDiagnostic(
@@ -841,7 +842,7 @@ func (r *alidnsGtmInstanceResource) updateGtmInstance(plan *alidnsGtmInstanceRes
 			_, err := r.client.MoveGtmResourceGroupWithOptions(moveGtmResourceGroupRequest, runtime)
 			if err != nil {
 				if _t, ok := err.(*tea.SDKError); ok {
-					if isAbleToRetry(*_t.Code) {
+					if utils.IsAbleToRetry(*_t.Code) {
 						return err
 					} else {
 						return backoff.Permanent(err)
@@ -880,7 +881,7 @@ func (r *alidnsGtmInstanceResource) updateGtmInstance(plan *alidnsGtmInstanceRes
 			_, err = r.client.SwitchDnsGtmInstanceStrategyModeWithOptions(switchDnsGtmInstanceStrategyModeRequest, runtime)
 			if err != nil {
 				if _t, ok := err.(*tea.SDKError); ok {
-					if isAbleToRetry(*_t.Code) {
+					if utils.IsAbleToRetry(*_t.Code) {
 						return err
 					} else {
 						return backoff.Permanent(err)
@@ -922,9 +923,9 @@ func (r *alidnsGtmInstanceResource) updateGtmInstance(plan *alidnsGtmInstanceRes
 
 	var planAlertGroupList []string
 	for _, x := range plan.AlertGroup.Elements() {
-		planAlertGroupList = append(planAlertGroupList, trimStringQuotes(x.String()))
+		planAlertGroupList = append(planAlertGroupList, utils.TrimStringQuotes(x.String()))
 	}
-	UpdateInstanceRequest.AlertGroup = tea.String(convertListStringToJsonString(planAlertGroupList))
+	UpdateInstanceRequest.AlertGroup = tea.String(utils.ConvertListStringToJsonString(planAlertGroupList))
 	state.AlertGroup = plan.AlertGroup
 
 	UpdateInstanceRequest.InstanceName = tea.String(plan.InstanceName.ValueString())
@@ -961,7 +962,7 @@ func (r *alidnsGtmInstanceResource) updateGtmInstance(plan *alidnsGtmInstanceRes
 		_, err = r.client.UpdateDnsGtmInstanceGlobalConfigWithOptions(UpdateInstanceRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)
@@ -997,7 +998,7 @@ func (r alidnsGtmInstanceResource) setInstanceRenewal(clientEndpoint string, req
 		_, err := r.baseClient.SetRenewalWithOptions(req, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

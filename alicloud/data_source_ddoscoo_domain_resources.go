@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"time"
 
@@ -29,7 +30,7 @@ type ddoscooDomainResourcesDataSource struct {
 }
 
 type ddoscooDomainResourcesDataSourceModel struct {
-	ClientConfig *clientConfig `tfsdk:"client_config"`
+	ClientConfig *utils.ClientConfig `tfsdk:"client_config"`
 	DomainName   types.String  `tfsdk:"domain_name"`
 	DomainCName  types.String  `tfsdk:"domain_cname"`
 }
@@ -96,10 +97,10 @@ func (d *ddoscooDomainResourcesDataSource) Read(ctx context.Context, req datasou
 	}
 
 	if plan.ClientConfig == nil {
-		plan.ClientConfig = &clientConfig{}
+		plan.ClientConfig = &utils.ClientConfig{}
 	}
 
-	initClient, clientCredentialsConfig, initClientDiags := initNewClient(&d.client.Client, plan.ClientConfig)
+	initClient, clientCredentialsConfig, initClientDiags := utils.InitNewClient(&d.client.Client, plan.ClientConfig)
 	if initClientDiags.HasError() {
 		resp.Diagnostics.Append(initClientDiags...)
 		return
@@ -142,7 +143,7 @@ func (d *ddoscooDomainResourcesDataSource) Read(ctx context.Context, req datasou
 		antiddosCooWebRules, err = d.client.DescribeWebRulesWithOptions(describeWebRulesRequest, runtime)
 		if err != nil {
 			if _t, ok := err.(*tea.SDKError); ok {
-				if isAbleToRetry(*_t.Code) {
+				if utils.IsAbleToRetry(*_t.Code) {
 					return err
 				} else {
 					return backoff.Permanent(err)

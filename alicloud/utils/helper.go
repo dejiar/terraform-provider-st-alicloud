@@ -1,4 +1,4 @@
-package alicloud
+package utils
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 )
 
 // Convert the result for an array and returns a Json string
-func convertListStringToJsonString(configured []string) string {
+func ConvertListStringToJsonString(configured []string) string {
 	if len(configured) < 1 {
 		return ""
 	}
@@ -30,7 +30,7 @@ func convertListStringToJsonString(configured []string) string {
 	return result
 }
 
-func convertJsonStringToListString(configured string) ([]string, error) {
+func ConvertJsonStringToListString(configured string) ([]string, error) {
 	result := make([]string, 0)
 	if err := json.Unmarshal([]byte(configured), &result); err != nil {
 		return nil, err
@@ -39,13 +39,13 @@ func convertJsonStringToListString(configured string) ([]string, error) {
 	return result, nil
 }
 
-func trimStringQuotes(input string) string {
+func TrimStringQuotes(input string) string {
 	return strings.TrimPrefix(strings.TrimSuffix(input, "\""), "\"")
 }
 
-// getTimeout parses a configured timeout string (e.g. "30m") and falls back
+// GetTimeout parses a configured timeout string (e.g. "30m") and falls back
 // to defaultTimeout when the value is null, unknown, empty, or invalid.
-func getTimeout(value types.String, defaultTimeout time.Duration) time.Duration {
+func GetTimeout(value types.String, defaultTimeout time.Duration) time.Duration {
 	if value.IsNull() || value.IsUnknown() || value.ValueString() == "" {
 		return defaultTimeout
 	}
@@ -56,9 +56,9 @@ func getTimeout(value types.String, defaultTimeout time.Duration) time.Duration 
 	return duration
 }
 
-func initNewClient(providerConfig *alicloudOpenapiClient.Client, planConfig *clientConfig) (initClient bool, clientConfig *alicloudOpenapiClient.Config, diag diag.Diagnostics) {
+func InitNewClient(providerConfig *alicloudOpenapiClient.Client, planConfig *ClientConfig) (initClient bool, ClientConfig *alicloudOpenapiClient.Config, diag diag.Diagnostics) {
 	initClient = false
-	clientConfig = &alicloudOpenapiClient.Config{}
+	ClientConfig = &alicloudOpenapiClient.Config{}
 	region := planConfig.Region.ValueString()
 	accessKey := planConfig.AccessKey.ValueString()
 	secretKey := planConfig.SecretKey.ValueString()
@@ -99,7 +99,7 @@ func initNewClient(providerConfig *alicloudOpenapiClient.Client, planConfig *cli
 			return
 		}
 
-		clientConfig = &alicloudOpenapiClient.Config{
+		ClientConfig = &alicloudOpenapiClient.Config{
 			RegionId:        &region,
 			AccessKeyId:     &accessKey,
 			AccessKeySecret: &secretKey,
