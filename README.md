@@ -147,6 +147,14 @@ scenario. The reason behind every resources and data sources are stated as below
 
   This resource manages user SSO settings in Alibaba Cloud IMS because no official Terraform resource currently exists for managing these settings.
 
+- **st-alicloud_kvstore_elastic_burst_bandwidth**
+
+  Manages elastic burst bandwidth for Alibaba Cloud Redis (R-Kvstore) instances. Burst allows the instance to temporarily exceed its base bandwidth limit. Uses the `EnableAdditionalBandwidth` API with `NodeId="All"`.
+
+- **st-alicloud_kvstore_individual_shard_bandwidth**
+
+  Manages additional individual shard bandwidth for Alibaba Cloud Redis (R-Kvstore) instances. The `bandwidth` field accepts the **total desired bandwidth** (not additional) — the provider reads `DefaultBandWidth` from the API and calculates the delta.
+
 ### Data Sources
 
 - **st-alicloud_ddoscoo_domain_resources**
