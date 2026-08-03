@@ -15,11 +15,7 @@ func HandleAPIError(err error) error {
 		return nil
 	}
 	if t, ok := err.(*tea.SDKError); ok {
-		code := ""
-		if t.Code != nil {
-			code = *t.Code
-		}
-		if IsAbleToRetry(code) {
+		if IsAbleToRetry(tea.StringValue(t.Code)) {
 			return err
 		}
 		return backoff.Permanent(err)
