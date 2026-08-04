@@ -251,9 +251,8 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 	return nil
 }
 
-// classifyAndBuildBwParams reads DescribeRoleZoneInfo and determines the
-// correct NodeId and Bandwidth parameters to preserve the current bandwidth
-// state when toggling burst.
+// determines the correct NodeId and Bandwidth parameters to preserve
+// the current bandwidth state when toggling burst.
 func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
 	readFn := func() error {
