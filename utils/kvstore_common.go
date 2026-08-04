@@ -42,6 +42,8 @@ func KvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 			}
 			return nil
 		}
+
+		// Retry backoff
 		reconnectBackoff := backoff.NewExponentialBackOff()
 		reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 		err := backoff.Retry(readFn, reconnectBackoff)
@@ -105,6 +107,8 @@ func KvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId stri
 		}
 		return nil
 	}
+
+	// Retry backoff
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err := backoff.Retry(readFn, reconnectBackoff)
@@ -143,6 +147,8 @@ func KvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, 
 		}
 		return nil
 	}
+
+	// Retry backoff
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err = backoff.Retry(readFn, reconnectBackoff)
