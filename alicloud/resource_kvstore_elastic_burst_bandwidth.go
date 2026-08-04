@@ -412,74 +412,61 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 	return strings.Join(ids, ","), strings.Join(bws, ","), nil
 }
 
-// readBurstValue reads IntranetBandWidthBurst from DescribeIntranetAttribute.
-// Returns the burst cap in MB/s. 0 = burst disabled.
-func (r *kvstoreElasticBurstBandwidthResource) readBurstValue(instanceId string) (int64, error) {
-	var resp *alicloudKvstoreClient.DescribeIntranetAttributeResponse
-	readFn := func() error {
-		runtime := &dara.RuntimeOptions{}
-		result, e := r.client.DescribeIntranetAttributeWithOptions(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
-			InstanceId: tea.String(instanceId),
-		}, runtime)
-		resp = result
-		if e != nil {
-			if _t, ok := e.(*tea.SDKError); ok {
-				if utils.IsAbleToRetry(*_t.Code) {
-					return e
-				} else {
-					return backoff.Permanent(e)
-				}
-			} else {
-				return e
-			}
-		}
-		return nil
-	}
-
-	// Retry backoff
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err := backoff.Retry(readFn, reconnectBackoff)
-	if err != nil {
-		return 0, err
-	}
-	if resp == nil || resp.Body == nil {
-		return 0, fmt.Errorf("empty response from DescribeIntranetAttribute for %s", instanceId)
-	}
-	if resp.Body.IntranetBandWidthBurst == nil {
-		return 0, nil
-	}
-	return int64(*resp.Body.IntranetBandWidthBurst), nil
-}
-
-// verifyBurst reads back IntranetBandWidthBurst and confirms the burst state matches.
-// Retries up to 5 minutes because the burst attribute may lag behind instance
-// status — the instance shows "Normal" before IntranetBandWidthBurst propagates.
+// verifyBurst polls DescribeIntranetAttribute until IntranetBandWidthBurst
+// matches the desired burst state, or times out after 5 minutes.
+// The burst attribute may lag behind instance status — the instance shows
+// "Normal" before IntranetBandWidthBurst propagates.
 func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, burst bool) error {
 	deadline := time.Now().Add(5 * time.Minute)
 	pollInterval := 10 * time.Second
+	var lastBurstBw int64
 
 	for time.Now().Before(deadline) {
-		burstBw, err := r.readBurstValue(instanceId)
+		var resp *alicloudKvstoreClient.DescribeIntranetAttributeResponse
+		readFn := func() error {
+			runtime := &dara.RuntimeOptions{}
+			result, e := r.client.DescribeIntranetAttributeWithOptions(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
+				InstanceId: tea.String(instanceId),
+			}, runtime)
+			resp = result
+			if e != nil {
+				if _t, ok := e.(*tea.SDKError); ok {
+					if utils.IsAbleToRetry(*_t.Code) {
+						return e
+					} else {
+						return backoff.Permanent(e)
+					}
+				} else {
+					return e
+				}
+			}
+			return nil
+		}
+
+		// Retry backoff
+		reconnectBackoff := backoff.NewExponentialBackOff()
+		reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+		err := backoff.Retry(readFn, reconnectBackoff)
 		if err != nil {
 			return fmt.Errorf("failed to read burst status for verification: %w", err)
 		}
-		if burst && burstBw > 0 {
+		if resp != nil && resp.Body != nil && resp.Body.IntranetBandWidthBurst != nil {
+			lastBurstBw = int64(*resp.Body.IntranetBandWidthBurst)
+		}
+		if burst && lastBurstBw > 0 {
 			return nil
 		}
-		if !burst && burstBw <= 0 {
+		if !burst && lastBurstBw <= 0 {
 			return nil
 		}
 		time.Sleep(pollInterval)
 	}
 
-	// Final read for error message
-	burstBw, _ := r.readBurstValue(instanceId)
-	if burst && burstBw <= 0 {
+	if burst && lastBurstBw <= 0 {
 		return fmt.Errorf("burstable_bandwidth=true but instance %s burst is not enabled (IntranetBandWidthBurst=0) after 5 minutes", instanceId)
 	}
-	if !burst && burstBw > 0 {
-		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d) after 5 minutes", instanceId, burstBw)
+	if !burst && lastBurstBw > 0 {
+		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d) after 5 minutes", instanceId, lastBurstBw)
 	}
 	return nil
 }
