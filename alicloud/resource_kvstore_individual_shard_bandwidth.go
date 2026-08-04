@@ -118,7 +118,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, re
 	desiredBw := plan.Bandwidth.ValueInt64()
 
 	// Read DefaultBandWidth from API to calculate additional bandwidth.
-	_, defaultBw, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	_, defaultBw, _, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to read DefaultBandWidth for shard.",
@@ -183,7 +183,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 	instanceId := state.InstanceId.ValueString()
 	shardId := state.ShardId.ValueString()
 
-	currentBw, _, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	currentBw, _, _, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "not found") ||
@@ -223,7 +223,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, re
 	desiredBw := plan.Bandwidth.ValueInt64()
 
 	// Read DefaultBandWidth from API to calculate additional bandwidth.
-	_, defaultBw, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	_, defaultBw, _, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to read DefaultBandWidth for shard.",
@@ -360,10 +360,71 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 	return nil
 }
 
+// readNodeBandwidth reads individual shard bandwidth from DescribeRoleZoneInfo,
+// matching by InsName (e.g. "r-xxx-db-0"). Returns currentBw, defaultBw, isBwOpen.
+func (r *kvstoreIndividualShardBandwidthResource) readNodeBandwidth(instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
+	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
+	readFn := func() error {
+		runtime := &dara.RuntimeOptions{}
+		result, e := r.client.DescribeRoleZoneInfoWithOptions(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+			InstanceId: tea.String(instanceId),
+		}, runtime)
+		resp = result
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if utils.IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
+	}
+
+	// Retry backoff
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err = backoff.Retry(readFn, reconnectBackoff)
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("failed to read node bandwidth for shard %s: %w", shardId, err)
+	}
+	if resp == nil || resp.Body == nil || resp.Body.Node == nil {
+		return 0, 0, false, fmt.Errorf("no Node in response for instance %s", instanceId)
+	}
+
+	nodes := resp.Body.Node.NodeInfo
+	if len(nodes) == 0 {
+		return 0, 0, false, fmt.Errorf("no NodeInfo in response for instance %s", instanceId)
+	}
+
+	// Match by InsName (e.g. "r-xxx-db-0") — this is the format EnableAdditionalBandwidth expects.
+	// DescribeRoleZoneInfo returns both MASTER and SLAVE for each shard; we take the first match
+	// (usually MASTER) since bandwidth is identical for both.
+	for _, node := range nodes {
+		if node.InsName != nil && *node.InsName == shardId {
+			if node.CurrentBandWidth != nil {
+				currentBw = *node.CurrentBandWidth
+			}
+			if node.DefaultBandWidth != nil {
+				defaultBw = *node.DefaultBandWidth
+			}
+			if node.IsOpenBandWidthService != nil {
+				isBwOpen = *node.IsOpenBandWidthService
+			}
+			return currentBw, defaultBw, isBwOpen, nil
+		}
+	}
+
+	return 0, 0, false, fmt.Errorf("node %s not found in instance %s (matched by InsName)", shardId, instanceId)
+}
+
 // verifyBandwidth reads back the shard bandwidth and confirms the requested
 // total value took effect.
 func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, desiredBw, defaultBw int64) error {
-	currentBw, _, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	currentBw, _, _, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		return fmt.Errorf("failed to read node bandwidth for verification: %w", err)
 	}
