@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -124,12 +126,27 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 	instanceId := state.InstanceId.ValueString()
 
 	// Check instance still exists.
-	err := kvstoreRetry(func() error {
+	readFn := func() error {
 		_, e := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
 			InstanceIds: tea.String(instanceId),
 		})
 		return e
-	})
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err := backoff.Retry(func() error {
+		err := readFn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return backoff.Permanent(err)
+	}, reconnectBackoff)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "invalidinstance") {
@@ -193,7 +210,7 @@ func (r *kvstoreElasticBurstBandwidthResource) Delete(ctx context.Context, req r
 	instanceId := state.InstanceId.ValueString()
 
 	// If the Redis instance itself is gone, nothing to disable.
-	if !kvstoreInstanceExists(r.client, instanceId) {
+	if !utils.KvstoreInstanceExists(r.client, instanceId) {
 		return
 	}
 
@@ -214,7 +231,7 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 	// Wait for any in-flight task to finish before making changes.
 	// AliCloud Redis returns "current instance has unfinish task" if the
 	// instance is still in "Changing" status from a previous operation.
-	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 10*time.Minute); waitErr != nil {
+	if waitErr := utils.KvstoreWaitForInstanceNormal(r.client, instanceId, 10*time.Minute); waitErr != nil {
 		return fmt.Errorf("instance %s not in Normal state before setBurst: %w", instanceId, waitErr)
 	}
 
@@ -232,12 +249,31 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 		AutoPay:        tea.Bool(true),
 	}
 
-	if err := kvstoreEnableAdditionalBandwidth(r.client, req); err != nil {
+	enableFn := func() error {
+		_, e := r.client.EnableAdditionalBandwidth(req)
+		return e
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err = backoff.Retry(func() error {
+		err := enableFn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return backoff.Permanent(err)
+	}, reconnectBackoff)
+	if err != nil {
 		return fmt.Errorf("failed to set elastic burst for instance %s (NodeId=%s, Bandwidth=%s): %w",
 			instanceId, nodeId, bandwidth, err)
 	}
 
-	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
+	if waitErr := utils.KvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
 		return fmt.Errorf("burst set but instance %s did not return to Normal: %w", instanceId, waitErr)
 	}
 
@@ -249,13 +285,28 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 // state when toggling burst.
 func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
-	err = kvstoreRetry(func() error {
+	readFn := func() error {
 		r, e := r.client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
 			InstanceId: tea.String(instanceId),
 		})
 		resp = r
 		return e
-	})
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err = backoff.Retry(func() error {
+		err := readFn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return backoff.Permanent(err)
+	}, reconnectBackoff)
 	if err != nil {
 		return "", "", fmt.Errorf("DescribeRoleZoneInfo failed: %w", err)
 	}
@@ -359,7 +410,7 @@ func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, bu
 	pollInterval := 10 * time.Second
 
 	for time.Now().Before(deadline) {
-		burstBw, err := kvstoreReadBurstValue(r.client, instanceId)
+		burstBw, err := utils.KvstoreReadBurstValue(r.client, instanceId)
 		if err != nil {
 			return fmt.Errorf("failed to read burst status for verification: %w", err)
 		}
@@ -373,7 +424,7 @@ func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, bu
 	}
 
 	// Final read for error message
-	burstBw, _ := kvstoreReadBurstValue(r.client, instanceId)
+	burstBw, _ := utils.KvstoreReadBurstValue(r.client, instanceId)
 	if burst && burstBw <= 0 {
 		return fmt.Errorf("burstable_bandwidth=true but instance %s burst is not enabled (IntranetBandWidthBurst=0) after 5 minutes", instanceId)
 	}

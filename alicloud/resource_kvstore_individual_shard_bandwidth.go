@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 	"context"
 	"fmt"
 	"regexp"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -115,7 +117,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, re
 	desiredBw := plan.Bandwidth.ValueInt64()
 
 	// Read DefaultBandWidth from API to calculate additional bandwidth.
-	_, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	_, defaultBw, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to read DefaultBandWidth for shard.",
@@ -180,7 +182,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 	instanceId := state.InstanceId.ValueString()
 	shardId := state.ShardId.ValueString()
 
-	currentBw, _, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	currentBw, _, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "not found") ||
@@ -220,7 +222,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, re
 	desiredBw := plan.Bandwidth.ValueInt64()
 
 	// Read DefaultBandWidth from API to calculate additional bandwidth.
-	_, defaultBw, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	_, defaultBw, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to read DefaultBandWidth for shard.",
@@ -286,7 +288,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Delete(ctx context.Context, re
 	shardId := state.ShardId.ValueString()
 
 	// If the Redis instance itself is gone, nothing to reset.
-	if !kvstoreInstanceExists(r.client, instanceId) {
+	if !utils.KvstoreInstanceExists(r.client, instanceId) {
 		return
 	}
 
@@ -313,7 +315,7 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 	// Wait for any in-flight task to finish before making changes.
 	// AliCloud Redis returns "current instance has unfinish task" if the
 	// instance is still in "Changing" status from a previous operation.
-	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 10*time.Minute); waitErr != nil {
+	if waitErr := utils.KvstoreWaitForInstanceNormal(r.client, instanceId, 10*time.Minute); waitErr != nil {
 		return fmt.Errorf("instance %s not in Normal state before setBandwidth: %w", instanceId, waitErr)
 	}
 
@@ -325,11 +327,30 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 		AutoPay:     tea.Bool(true),
 	}
 
-	if err := kvstoreEnableAdditionalBandwidth(r.client, req); err != nil {
+	enableFn := func() error {
+		_, e := r.client.EnableAdditionalBandwidth(req)
+		return e
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err := backoff.Retry(func() error {
+		err := enableFn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return backoff.Permanent(err)
+	}, reconnectBackoff)
+	if err != nil {
 		return fmt.Errorf("failed to set individual shard bandwidth for instance %s shard %s: %w", instanceId, shardId, err)
 	}
 
-	if waitErr := kvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
+	if waitErr := utils.KvstoreWaitForInstanceNormal(r.client, instanceId, 5*time.Minute); waitErr != nil {
 		return fmt.Errorf("bandwidth set but instance %s did not return to Normal: %w", instanceId, waitErr)
 	}
 	return nil
@@ -338,7 +359,7 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 // verifyBandwidth reads back the shard bandwidth and confirms the requested
 // total value took effect.
 func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, desiredBw, defaultBw int64) error {
-	currentBw, _, _, err := kvstoreReadNodeBandwidth(r.client, instanceId, shardId)
+	currentBw, _, _, err := utils.KvstoreReadNodeBandwidth(r.client, instanceId, shardId)
 	if err != nil {
 		return fmt.Errorf("failed to read node bandwidth for verification: %w", err)
 	}

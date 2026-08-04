@@ -1,4 +1,4 @@
-package alicloud
+package utils
 
 import (
 	"fmt"
@@ -9,48 +9,41 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	alicloudKvstoreClient "github.com/alibabacloud-go/r-kvstore-20150101/v7/client"
-
-	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
 )
 
-// kvstoreRetry wraps a function with exponential backoff retry logic.
-// Non-retryable errors are made permanent via backoff.Permanent.
-func kvstoreRetry(fn func() error) error {
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	return backoff.Retry(func() error {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
-}
-
-// kvstoreWaitForInstanceNormal polls DescribeInstances until the instance
+// KvstoreWaitForInstanceNormal polls DescribeInstances until the instance
 // reaches Normal status or the timeout elapses. Redis bandwidth changes take
 // 1-2 minutes (instance goes through Changing → Normal).
 // Returns nil if the instance is deleted (empty result) — caller should treat
 // this as "nothing to do" rather than an error.
-func kvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instanceId string, timeout time.Duration) error {
+func KvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instanceId string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	pollInterval := 10 * time.Second
 
 	for time.Now().Before(deadline) {
 		var resp *alicloudKvstoreClient.DescribeInstancesResponse
-		err := kvstoreRetry(func() error {
+		readFn := func() error {
 			r, e := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
 				InstanceIds: tea.String(instanceId),
 			})
 			resp = r
 			return e
-		})
+		}
+		reconnectBackoff := backoff.NewExponentialBackOff()
+		reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+		err := backoff.Retry(func() error {
+			err := readFn()
+			if err == nil {
+				return nil
+			}
+			if t, ok := err.(*tea.SDKError); ok {
+				if IsAbleToRetry(tea.StringValue(t.Code)) {
+					return err
+				}
+				return backoff.Permanent(err)
+			}
+			return backoff.Permanent(err)
+		}, reconnectBackoff)
 		if err != nil {
 			// Instance deleted — nothing to wait for.
 			errStr := strings.ToLower(err.Error())
@@ -73,8 +66,8 @@ func kvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 	return fmt.Errorf("timed out waiting for instance %s to reach Normal status", instanceId)
 }
 
-// kvstoreInstanceExists checks if a Redis instance still exists.
-func kvstoreInstanceExists(client *alicloudKvstoreClient.Client, instanceId string) bool {
+// KvstoreInstanceExists checks if a Redis instance still exists.
+func KvstoreInstanceExists(client *alicloudKvstoreClient.Client, instanceId string) bool {
 	resp, err := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
 		InstanceIds: tea.String(instanceId),
 	})
@@ -87,17 +80,32 @@ func kvstoreInstanceExists(client *alicloudKvstoreClient.Client, instanceId stri
 	return len(resp.Body.Instances.KVStoreInstance) > 0
 }
 
-// kvstoreReadBurstValue reads IntranetBandWidthBurst from DescribeIntranetAttribute.
+// KvstoreReadBurstValue reads IntranetBandWidthBurst from DescribeIntranetAttribute.
 // Returns the burst cap in MB/s. 0 = burst disabled.
-func kvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId string) (int64, error) {
+func KvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId string) (int64, error) {
 	var resp *alicloudKvstoreClient.DescribeIntranetAttributeResponse
-	err := kvstoreRetry(func() error {
+	readFn := func() error {
 		r, e := client.DescribeIntranetAttribute(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
 			InstanceId: tea.String(instanceId),
 		})
 		resp = r
 		return e
-	})
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err := backoff.Retry(func() error {
+		err := readFn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			if IsAbleToRetry(tea.StringValue(t.Code)) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return backoff.Permanent(err)
+	}, reconnectBackoff)
 	if err != nil {
 		return 0, err
 	}
@@ -110,17 +118,32 @@ func kvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId stri
 	return int64(*resp.Body.IntranetBandWidthBurst), nil
 }
 
-// kvstoreReadNodeBandwidth reads individual shard bandwidth from DescribeRoleZoneInfo,
+// KvstoreReadNodeBandwidth reads individual shard bandwidth from DescribeRoleZoneInfo,
 // matching by InsName (e.g. "r-xxx-db-0"). Returns currentBw, defaultBw, isBwOpen.
-func kvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
+func KvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
-	err = kvstoreRetry(func() error {
+	readFn := func() error {
 		r, e := client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
 			InstanceId: tea.String(instanceId),
 		})
 		resp = r
 		return e
-	})
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
+	err = backoff.Retry(func() error {
+		err := readFn()
+		if err == nil {
+			return nil
+		}
+		if t, ok := err.(*tea.SDKError); ok {
+			if IsAbleToRetry(tea.StringValue(t.Code)) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		return backoff.Permanent(err)
+	}, reconnectBackoff)
 	if err != nil {
 		return 0, 0, false, fmt.Errorf("failed to read node bandwidth for shard %s: %w", shardId, err)
 	}
@@ -152,13 +175,4 @@ func kvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, 
 	}
 
 	return 0, 0, false, fmt.Errorf("node %s not found in instance %s (matched by InsName)", shardId, instanceId)
-}
-
-// kvstoreEnableAdditionalBandwidth calls EnableAdditionalBandwidth with retry.
-// Used for both burst and individual shard bandwidth.
-func kvstoreEnableAdditionalBandwidth(client *alicloudKvstoreClient.Client, req *alicloudKvstoreClient.EnableAdditionalBandwidthRequest) error {
-	return kvstoreRetry(func() error {
-		_, err := client.EnableAdditionalBandwidth(req)
-		return err
-	})
 }
