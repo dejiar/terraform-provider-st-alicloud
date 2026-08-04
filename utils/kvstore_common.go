@@ -37,7 +37,7 @@ func KvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 				return nil
 			}
 			if t, ok := err.(*tea.SDKError); ok {
-				if IsAbleToRetry(tea.StringValue(t.Code)) {
+				if IsAbleToRetry(*t.Code) {
 					return err
 				}
 				return backoff.Permanent(err)
@@ -99,7 +99,7 @@ func KvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId stri
 			return nil
 		}
 		if t, ok := err.(*tea.SDKError); ok {
-			if IsAbleToRetry(tea.StringValue(t.Code)) {
+			if IsAbleToRetry(*t.Code) {
 				return err
 			}
 			return backoff.Permanent(err)
@@ -137,7 +137,7 @@ func KvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, 
 			return nil
 		}
 		if t, ok := err.(*tea.SDKError); ok {
-			if IsAbleToRetry(tea.StringValue(t.Code)) {
+			if IsAbleToRetry(*t.Code) {
 				return err
 			}
 			return backoff.Permanent(err)

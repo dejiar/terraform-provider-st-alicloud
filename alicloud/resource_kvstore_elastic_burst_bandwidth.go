@@ -140,7 +140,7 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 			return nil
 		}
 		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+			if utils.IsAbleToRetry(*t.Code) {
 				return err
 			}
 			return backoff.Permanent(err)
@@ -261,7 +261,7 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 			return nil
 		}
 		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+			if utils.IsAbleToRetry(*t.Code) {
 				return err
 			}
 			return backoff.Permanent(err)
@@ -300,7 +300,7 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 			return nil
 		}
 		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+			if utils.IsAbleToRetry(*t.Code) {
 				return err
 			}
 			return backoff.Permanent(err)

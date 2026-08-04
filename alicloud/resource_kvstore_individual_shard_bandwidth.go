@@ -339,7 +339,7 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 			return nil
 		}
 		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(tea.StringValue(t.Code)) {
+			if utils.IsAbleToRetry(*t.Code) {
 				return err
 			}
 			return backoff.Permanent(err)
