@@ -144,6 +144,8 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 		}
 		return nil
 	}
+
+	// Retry backoff
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err := backoff.Retry(readFn, reconnectBackoff)
@@ -264,6 +266,8 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 		}
 		return nil
 	}
+
+	// Retry backoff
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err = backoff.Retry(enableFn, reconnectBackoff)
@@ -303,6 +307,8 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 		}
 		return nil
 	}
+
+	// Retry backoff
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err = backoff.Retry(readFn, reconnectBackoff)

@@ -344,6 +344,8 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 		}
 		return nil
 	}
+
+	// Retry backoff
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err := backoff.Retry(enableFn, reconnectBackoff)
