@@ -130,23 +130,22 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 		_, e := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
 			InstanceIds: tea.String(instanceId),
 		})
-		return e
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if utils.IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
 	}
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err := backoff.Retry(func() error {
-		err := readFn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(*t.Code) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
+	err := backoff.Retry(readFn, reconnectBackoff)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "invalidinstance") {
@@ -251,23 +250,22 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 
 	enableFn := func() error {
 		_, e := r.client.EnableAdditionalBandwidth(req)
-		return e
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if utils.IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
 	}
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err = backoff.Retry(func() error {
-		err := enableFn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(*t.Code) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
+	err = backoff.Retry(enableFn, reconnectBackoff)
 	if err != nil {
 		return fmt.Errorf("failed to set elastic burst for instance %s (NodeId=%s, Bandwidth=%s): %w",
 			instanceId, nodeId, bandwidth, err)
@@ -290,23 +288,22 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 			InstanceId: tea.String(instanceId),
 		})
 		resp = r
-		return e
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if utils.IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
 	}
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err = backoff.Retry(func() error {
-		err := readFn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(*t.Code) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
+	err = backoff.Retry(readFn, reconnectBackoff)
 	if err != nil {
 		return "", "", fmt.Errorf("DescribeRoleZoneInfo failed: %w", err)
 	}

@@ -27,23 +27,22 @@ func KvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 				InstanceIds: tea.String(instanceId),
 			})
 			resp = r
-			return e
+			if e != nil {
+				if _t, ok := e.(*tea.SDKError); ok {
+					if IsAbleToRetry(*_t.Code) {
+						return e
+					} else {
+						return backoff.Permanent(e)
+					}
+				} else {
+					return e
+				}
+			}
+			return nil
 		}
 		reconnectBackoff := backoff.NewExponentialBackOff()
 		reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-		err := backoff.Retry(func() error {
-			err := readFn()
-			if err == nil {
-				return nil
-			}
-			if t, ok := err.(*tea.SDKError); ok {
-				if IsAbleToRetry(*t.Code) {
-					return err
-				}
-				return backoff.Permanent(err)
-			}
-			return backoff.Permanent(err)
-		}, reconnectBackoff)
+		err := backoff.Retry(readFn, reconnectBackoff)
 		if err != nil {
 			// Instance deleted — nothing to wait for.
 			errStr := strings.ToLower(err.Error())
@@ -89,23 +88,22 @@ func KvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId stri
 			InstanceId: tea.String(instanceId),
 		})
 		resp = r
-		return e
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
 	}
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err := backoff.Retry(func() error {
-		err := readFn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if IsAbleToRetry(*t.Code) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
+	err := backoff.Retry(readFn, reconnectBackoff)
 	if err != nil {
 		return 0, err
 	}
@@ -127,23 +125,22 @@ func KvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, 
 			InstanceId: tea.String(instanceId),
 		})
 		resp = r
-		return e
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
 	}
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err = backoff.Retry(func() error {
-		err := readFn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if IsAbleToRetry(*t.Code) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
+	err = backoff.Retry(readFn, reconnectBackoff)
 	if err != nil {
 		return 0, 0, false, fmt.Errorf("failed to read node bandwidth for shard %s: %w", shardId, err)
 	}

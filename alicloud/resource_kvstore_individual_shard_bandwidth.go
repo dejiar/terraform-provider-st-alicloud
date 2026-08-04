@@ -329,23 +329,22 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 
 	enableFn := func() error {
 		_, e := r.client.EnableAdditionalBandwidth(req)
-		return e
+		if e != nil {
+			if _t, ok := e.(*tea.SDKError); ok {
+				if utils.IsAbleToRetry(*_t.Code) {
+					return e
+				} else {
+					return backoff.Permanent(e)
+				}
+			} else {
+				return e
+			}
+		}
+		return nil
 	}
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err := backoff.Retry(func() error {
-		err := enableFn()
-		if err == nil {
-			return nil
-		}
-		if t, ok := err.(*tea.SDKError); ok {
-			if utils.IsAbleToRetry(*t.Code) {
-				return err
-			}
-			return backoff.Permanent(err)
-		}
-		return backoff.Permanent(err)
-	}, reconnectBackoff)
+	err := backoff.Retry(enableFn, reconnectBackoff)
 	if err != nil {
 		return fmt.Errorf("failed to set individual shard bandwidth for instance %s shard %s: %w", instanceId, shardId, err)
 	}
