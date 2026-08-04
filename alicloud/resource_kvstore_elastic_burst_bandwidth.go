@@ -128,9 +128,10 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 
 	// Check instance still exists.
 	readFn := func() error {
-		_, e := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+		runtime := &dara.RuntimeOptions{}
+		_, e := r.client.DescribeInstancesWithOptions(&alicloudKvstoreClient.DescribeInstancesRequest{
 			InstanceIds: tea.String(instanceId),
-		})
+		}, runtime)
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
 				if utils.IsAbleToRetry(*_t.Code) {
@@ -252,7 +253,8 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 	}
 
 	enableFn := func() error {
-		_, e := r.client.EnableAdditionalBandwidth(req)
+		runtime := &dara.RuntimeOptions{}
+		_, e := r.client.EnableAdditionalBandwidthWithOptions(req, runtime)
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
 				if utils.IsAbleToRetry(*_t.Code) {
