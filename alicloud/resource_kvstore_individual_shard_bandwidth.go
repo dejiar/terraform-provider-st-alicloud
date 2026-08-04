@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -328,7 +329,8 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 	}
 
 	enableFn := func() error {
-		_, e := r.client.EnableAdditionalBandwidth(req)
+		runtime := &dara.RuntimeOptions{}
+		_, e := r.client.EnableAdditionalBandwidthWithOptions(req, runtime)
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
 				if utils.IsAbleToRetry(*_t.Code) {

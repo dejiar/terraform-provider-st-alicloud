@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/cenkalti/backoff/v4"
 
@@ -23,9 +24,10 @@ func KvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 	for time.Now().Before(deadline) {
 		var resp *alicloudKvstoreClient.DescribeInstancesResponse
 		readFn := func() error {
-			r, e := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+			runtime := &dara.RuntimeOptions{}
+			r, e := client.DescribeInstancesWithOptions(&alicloudKvstoreClient.DescribeInstancesRequest{
 				InstanceIds: tea.String(instanceId),
-			})
+			}, runtime)
 			resp = r
 			if e != nil {
 				if _t, ok := e.(*tea.SDKError); ok {
@@ -67,9 +69,10 @@ func KvstoreWaitForInstanceNormal(client *alicloudKvstoreClient.Client, instance
 
 // KvstoreInstanceExists checks if a Redis instance still exists.
 func KvstoreInstanceExists(client *alicloudKvstoreClient.Client, instanceId string) bool {
-	resp, err := client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+	runtime := &dara.RuntimeOptions{}
+	resp, err := client.DescribeInstancesWithOptions(&alicloudKvstoreClient.DescribeInstancesRequest{
 		InstanceIds: tea.String(instanceId),
-	})
+	}, runtime)
 	if err != nil {
 		return false
 	}
@@ -84,9 +87,10 @@ func KvstoreInstanceExists(client *alicloudKvstoreClient.Client, instanceId stri
 func KvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId string) (int64, error) {
 	var resp *alicloudKvstoreClient.DescribeIntranetAttributeResponse
 	readFn := func() error {
-		r, e := client.DescribeIntranetAttribute(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
+		runtime := &dara.RuntimeOptions{}
+		r, e := client.DescribeIntranetAttributeWithOptions(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
 			InstanceId: tea.String(instanceId),
-		})
+		}, runtime)
 		resp = r
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
@@ -121,9 +125,10 @@ func KvstoreReadBurstValue(client *alicloudKvstoreClient.Client, instanceId stri
 func KvstoreReadNodeBandwidth(client *alicloudKvstoreClient.Client, instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
 	readFn := func() error {
-		r, e := client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+		runtime := &dara.RuntimeOptions{}
+		r, e := client.DescribeRoleZoneInfoWithOptions(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
 			InstanceId: tea.String(instanceId),
-		})
+		}, runtime)
 		resp = r
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {

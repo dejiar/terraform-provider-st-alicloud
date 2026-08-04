@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -127,9 +128,10 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 
 	// Check instance still exists.
 	readFn := func() error {
-		_, e := r.client.DescribeInstances(&alicloudKvstoreClient.DescribeInstancesRequest{
+		runtime := &dara.RuntimeOptions{}
+		_, e := r.client.DescribeInstancesWithOptions(&alicloudKvstoreClient.DescribeInstancesRequest{
 			InstanceIds: tea.String(instanceId),
-		})
+		}, runtime)
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
 				if utils.IsAbleToRetry(*_t.Code) {
@@ -249,7 +251,8 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 	}
 
 	enableFn := func() error {
-		_, e := r.client.EnableAdditionalBandwidth(req)
+		runtime := &dara.RuntimeOptions{}
+		_, e := r.client.EnableAdditionalBandwidthWithOptions(req, runtime)
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
 				if utils.IsAbleToRetry(*_t.Code) {
@@ -284,9 +287,10 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
 	readFn := func() error {
-		r, e := r.client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+		runtime := &dara.RuntimeOptions{}
+		r, e := r.client.DescribeRoleZoneInfoWithOptions(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
 			InstanceId: tea.String(instanceId),
-		})
+		}, runtime)
 		resp = r
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
