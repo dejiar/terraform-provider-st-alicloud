@@ -1,7 +1,7 @@
 package alicloud
 
 import (
-	"github.com/myklst/terraform-provider-st-alicloud/alicloud/utils"
+	"github.com/myklst/terraform-provider-st-alicloud/utils"
 	"context"
 	"fmt"
 	"strconv"
