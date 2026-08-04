@@ -100,14 +100,6 @@ func (r *kvstoreElasticBurstBandwidthResource) Create(ctx context.Context, req r
 		return
 	}
 
-	if err := r.verifyBurst(instanceId, burst); err != nil {
-		resp.Diagnostics.AddError(
-			"[VERIFY ERROR] Apply succeeded but read-back verification failed.",
-			err.Error(),
-		)
-		return
-	}
-
 	state := &kvstoreElasticBurstBandwidthModel{
 		Id:                 types.StringValue(instanceId),
 		InstanceId:         plan.InstanceId,
@@ -162,14 +154,6 @@ func (r *kvstoreElasticBurstBandwidthResource) Update(ctx context.Context, req r
 	if err := r.setBurst(instanceId, burst); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to update Redis elastic burst bandwidth.",
-			err.Error(),
-		)
-		return
-	}
-
-	if err := r.verifyBurst(instanceId, burst); err != nil {
-		resp.Diagnostics.AddError(
-			"[VERIFY ERROR] Update succeeded but read-back verification failed.",
 			err.Error(),
 		)
 		return
@@ -390,63 +374,4 @@ func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instance
 		bws = append(bws, strconv.FormatInt(additional, 10))
 	}
 	return strings.Join(ids, ","), strings.Join(bws, ","), nil
-}
-
-// verifyBurst polls DescribeIntranetAttribute until IntranetBandWidthBurst
-// matches the desired burst state, or times out after 5 minutes.
-// The burst attribute may lag behind instance status — the instance shows
-// "Normal" before IntranetBandWidthBurst propagates.
-func (r *kvstoreElasticBurstBandwidthResource) verifyBurst(instanceId string, burst bool) error {
-	deadline := time.Now().Add(5 * time.Minute)
-	pollInterval := 10 * time.Second
-	var lastBurstBw int64
-
-	for time.Now().Before(deadline) {
-		var resp *alicloudKvstoreClient.DescribeIntranetAttributeResponse
-		readFn := func() error {
-			runtime := &dara.RuntimeOptions{}
-			result, e := r.client.DescribeIntranetAttributeWithOptions(&alicloudKvstoreClient.DescribeIntranetAttributeRequest{
-				InstanceId: tea.String(instanceId),
-			}, runtime)
-			resp = result
-			if e != nil {
-				if _t, ok := e.(*tea.SDKError); ok {
-					if utils.IsAbleToRetry(*_t.Code) {
-						return e
-					} else {
-						return backoff.Permanent(e)
-					}
-				} else {
-					return e
-				}
-			}
-			return nil
-		}
-
-		// Retry backoff
-		reconnectBackoff := backoff.NewExponentialBackOff()
-		reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-		err := backoff.Retry(readFn, reconnectBackoff)
-		if err != nil {
-			return fmt.Errorf("failed to read burst status for verification: %w", err)
-		}
-		if resp != nil && resp.Body != nil && resp.Body.IntranetBandWidthBurst != nil {
-			lastBurstBw = int64(*resp.Body.IntranetBandWidthBurst)
-		}
-		if burst && lastBurstBw > 0 {
-			return nil
-		}
-		if !burst && lastBurstBw <= 0 {
-			return nil
-		}
-		time.Sleep(pollInterval)
-	}
-
-	if burst && lastBurstBw <= 0 {
-		return fmt.Errorf("burstable_bandwidth=true but instance %s burst is not enabled (IntranetBandWidthBurst=0) after 5 minutes", instanceId)
-	}
-	if !burst && lastBurstBw > 0 {
-		return fmt.Errorf("burstable_bandwidth=false but instance %s burst is still enabled (IntranetBandWidthBurst=%d) after 5 minutes", instanceId, lastBurstBw)
-	}
-	return nil
 }
