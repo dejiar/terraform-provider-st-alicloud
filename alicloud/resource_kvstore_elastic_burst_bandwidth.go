@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -284,9 +285,10 @@ func (r *kvstoreElasticBurstBandwidthResource) setBurst(instanceId string, burst
 func (r *kvstoreElasticBurstBandwidthResource) classifyAndBuildBwParams(instanceId string) (nodeId, bandwidth string, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
 	readFn := func() error {
-		r, e := r.client.DescribeRoleZoneInfo(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
+		runtime := &dara.RuntimeOptions{}
+		r, e := r.client.DescribeRoleZoneInfoWithOptions(&alicloudKvstoreClient.DescribeRoleZoneInfoRequest{
 			InstanceId: tea.String(instanceId),
-		})
+		}, runtime)
 		resp = r
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
