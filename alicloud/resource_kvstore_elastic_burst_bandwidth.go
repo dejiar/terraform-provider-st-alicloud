@@ -127,30 +127,10 @@ func (r *kvstoreElasticBurstBandwidthResource) Read(ctx context.Context, req res
 	instanceId := state.InstanceId.ValueString()
 
 	// Check instance still exists.
-	readFn := func() error {
-		runtime := &dara.RuntimeOptions{}
-
-		_, e := r.client.DescribeInstancesWithOptions(&alicloudKvstoreClient.DescribeInstancesRequest{
-			InstanceIds: tea.String(instanceId),
-		}, runtime)
-		if e != nil {
-			if _t, ok := e.(*tea.SDKError); ok {
-				if utils.IsAbleToRetry(*_t.Code) {
-					return e
-				} else {
-					return backoff.Permanent(e)
-				}
-			} else {
-				return e
-			}
-		}
-		return nil
-	}
-
-	// Retry backoff
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
-	err := backoff.Retry(readFn, reconnectBackoff)
+	runtime := &dara.RuntimeOptions{}
+	_, err := r.client.DescribeInstancesWithOptions(&alicloudKvstoreClient.DescribeInstancesRequest{
+		InstanceIds: tea.String(instanceId),
+	}, runtime)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "invalidinstance") {
