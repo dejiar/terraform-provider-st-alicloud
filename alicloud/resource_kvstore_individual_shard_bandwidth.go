@@ -118,7 +118,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, re
 	desiredBw := plan.Bandwidth.ValueInt64()
 
 	// Read DefaultBandWidth from API to calculate additional bandwidth.
-	_, defaultBw, _, err := r.readNodeBandwidth(instanceId, shardId)
+	_, defaultBw, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to read DefaultBandWidth for shard.",
@@ -155,14 +155,6 @@ func (r *kvstoreIndividualShardBandwidthResource) Create(ctx context.Context, re
 		return
 	}
 
-	if err := r.verifyBandwidth(instanceId, shardId, desiredBw, defaultBw); err != nil {
-		resp.Diagnostics.AddError(
-			"[VERIFY ERROR] Apply succeeded but read-back verification failed.",
-			err.Error(),
-		)
-		return
-	}
-
 	state := &kvstoreIndividualShardBandwidthModel{
 		Id:         types.StringValue(makeShardId(instanceId, shardId)),
 		InstanceId: plan.InstanceId,
@@ -183,7 +175,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Read(ctx context.Context, req 
 	instanceId := state.InstanceId.ValueString()
 	shardId := state.ShardId.ValueString()
 
-	currentBw, _, _, err := r.readNodeBandwidth(instanceId, shardId)
+	currentBw, _, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "not found") ||
@@ -223,7 +215,7 @@ func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, re
 	desiredBw := plan.Bandwidth.ValueInt64()
 
 	// Read DefaultBandWidth from API to calculate additional bandwidth.
-	_, defaultBw, _, err := r.readNodeBandwidth(instanceId, shardId)
+	_, defaultBw, err := r.readNodeBandwidth(instanceId, shardId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to read DefaultBandWidth for shard.",
@@ -255,14 +247,6 @@ func (r *kvstoreIndividualShardBandwidthResource) Update(ctx context.Context, re
 	if err := r.setBandwidth(instanceId, shardId, additionalBw); err != nil {
 		resp.Diagnostics.AddError(
 			"[API ERROR] Failed to update Redis individual shard bandwidth.",
-			err.Error(),
-		)
-		return
-	}
-
-	if err := r.verifyBandwidth(instanceId, shardId, desiredBw, defaultBw); err != nil {
-		resp.Diagnostics.AddError(
-			"[VERIFY ERROR] Update succeeded but read-back verification failed.",
 			err.Error(),
 		)
 		return
@@ -361,8 +345,8 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 }
 
 // readNodeBandwidth reads individual shard bandwidth from DescribeRoleZoneInfo,
-// matching by InsName (e.g. "r-xxx-db-0"). Returns currentBw, defaultBw, isBwOpen.
-func (r *kvstoreIndividualShardBandwidthResource) readNodeBandwidth(instanceId, shardId string) (currentBw, defaultBw int64, isBwOpen bool, err error) {
+// matching by InsName (e.g. "r-xxx-db-0"). Returns currentBw, defaultBw.
+func (r *kvstoreIndividualShardBandwidthResource) readNodeBandwidth(instanceId, shardId string) (currentBw, defaultBw int64, err error) {
 	var resp *alicloudKvstoreClient.DescribeRoleZoneInfoResponse
 	readFn := func() error {
 		runtime := &dara.RuntimeOptions{}
@@ -389,15 +373,15 @@ func (r *kvstoreIndividualShardBandwidthResource) readNodeBandwidth(instanceId, 
 	reconnectBackoff.MaxElapsedTime = 5 * time.Minute
 	err = backoff.Retry(readFn, reconnectBackoff)
 	if err != nil {
-		return 0, 0, false, fmt.Errorf("failed to read node bandwidth for shard %s: %w", shardId, err)
+		return 0, 0, fmt.Errorf("failed to read node bandwidth for shard %s: %w", shardId, err)
 	}
 	if resp == nil || resp.Body == nil || resp.Body.Node == nil {
-		return 0, 0, false, fmt.Errorf("no Node in response for instance %s", instanceId)
+		return 0, 0, fmt.Errorf("no Node in response for instance %s", instanceId)
 	}
 
 	nodes := resp.Body.Node.NodeInfo
 	if len(nodes) == 0 {
-		return 0, 0, false, fmt.Errorf("no NodeInfo in response for instance %s", instanceId)
+		return 0, 0, fmt.Errorf("no NodeInfo in response for instance %s", instanceId)
 	}
 
 	// Match by InsName (e.g. "r-xxx-db-0") — this is the format EnableAdditionalBandwidth expects.
@@ -411,26 +395,10 @@ func (r *kvstoreIndividualShardBandwidthResource) readNodeBandwidth(instanceId, 
 			if node.DefaultBandWidth != nil {
 				defaultBw = *node.DefaultBandWidth
 			}
-			if node.IsOpenBandWidthService != nil {
-				isBwOpen = *node.IsOpenBandWidthService
-			}
-			return currentBw, defaultBw, isBwOpen, nil
+			return currentBw, defaultBw, nil
 		}
 	}
 
-	return 0, 0, false, fmt.Errorf("node %s not found in instance %s (matched by InsName)", shardId, instanceId)
+	return 0, 0, fmt.Errorf("node %s not found in instance %s (matched by InsName)", shardId, instanceId)
 }
 
-// verifyBandwidth reads back the shard bandwidth and confirms the requested
-// total value took effect.
-func (r *kvstoreIndividualShardBandwidthResource) verifyBandwidth(instanceId, shardId string, desiredBw, defaultBw int64) error {
-	currentBw, _, _, err := r.readNodeBandwidth(instanceId, shardId)
-	if err != nil {
-		return fmt.Errorf("failed to read node bandwidth for verification: %w", err)
-	}
-	if currentBw != desiredBw {
-		return fmt.Errorf("bandwidth mismatch for shard %s: requested %d MB/s total, got %d MB/s (DefaultBandWidth=%d, additional=%d)",
-			shardId, desiredBw, currentBw, defaultBw, desiredBw-defaultBw)
-	}
-	return nil
-}
