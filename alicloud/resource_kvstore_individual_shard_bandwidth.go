@@ -330,6 +330,7 @@ func (r *kvstoreIndividualShardBandwidthResource) setBandwidth(instanceId, shard
 
 	enableFn := func() error {
 		runtime := &dara.RuntimeOptions{}
+
 		_, e := r.client.EnableAdditionalBandwidthWithOptions(req, runtime)
 		if e != nil {
 			if _t, ok := e.(*tea.SDKError); ok {
